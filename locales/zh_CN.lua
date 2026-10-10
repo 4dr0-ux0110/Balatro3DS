@@ -1,3 +1,4 @@
+--- Thanks to @Fussyzhy
 return {
     ["language.en"] = "English",
     ["language.zh_CN"] = "简体中文",
