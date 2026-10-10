@@ -2286,6 +2286,22 @@ function Game:refresh_discovery_deck_unlocks()
     end
 end
 
+--- The player-facing name of anything `discover_item` accepts, for the discovery toast.
+--- Falls back to the id only for something no catalog names.
+---@return string
+function Game:discovery_display_name(id)
+    for _, defs in ipairs({ JOKER_DEFS, CONSUMABLE_DEFS, VOUCHER_DEFS, self.P_TAGS, self.P_BLINDS }) do
+        local def = type(defs) == "table" and defs[id]
+        if type(def) == "table" and def.name then return def.name end
+    end
+    for _, entries in pairs(CollectionCatalog.all_entries_by_category() or {}) do
+        for _, entry in ipairs(entries) do
+            if entry.discovery_id == id and entry.name then return entry.name end
+        end
+    end
+    return id
+end
+
 --- Record first-time discovery of a Joker, Tarot, Planet, or Spectral card.
 ---@return boolean true when newly discovered
 function Game:discover_item(id)
@@ -2308,7 +2324,7 @@ function Game:discover_item(id)
     end
     self:check_voucher_unlocks()
     if not self._unlock_discovery then
-        Milestones.push(self, "discovery", "New discovery", id)
+        Milestones.push(self, "discovery", "New discovery", self:discovery_display_name(id))
     end
     self:save_settings()
     return true
@@ -2602,7 +2618,10 @@ function Game:record_challenge_victory(challenge_id)
     local was_complete = self.SETTINGS.CHALLENGE_WINS[challenge_id] == true
     self.SETTINGS.CHALLENGE_WINS[challenge_id] = true
     self:refresh_challenge_unlocks()
-    if not was_complete then Milestones.push(self, "challenge", "Challenge complete", challenge_id) end
+    if not was_complete then
+        local def = CHALLENGE_DEFS_BY_ID and CHALLENGE_DEFS_BY_ID[challenge_id]
+        Milestones.push(self, "challenge", "Challenge complete", (def and def.name) or challenge_id)
+    end
     self:save_settings()
     return true
 end
