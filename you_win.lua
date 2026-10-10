@@ -1,7 +1,21 @@
 local YouWinUI = {}
+local NumberFormat = require("number_format")
+local TicketStrip = require("ticket_strip")
+
+local WIN_QUIPS = {
+    "You Aced it!", "You dealt with that pretty well!", "Looks like you weren't bluffing!",
+    "Too bad these chips are all virtual...", "Looks like I've taught you well!",
+    "You made some heads up plays!", "Good thing I didn't bet against you!",
+}
+
+function YouWinUI.quip(game)
+    local index = ((math.floor(tonumber(game.round) or 0) + math.floor(tonumber(game.ante) or 0))
+        % #WIN_QUIPS) + 1
+    return WIN_QUIPS[index]
+end
 
 local function fmt_num(n)
-    return tostring(math.floor(tonumber(n) or 0))
+    return NumberFormat.format(math.floor(tonumber(n) or 0))
 end
 
 YouWinUI.information = {
@@ -60,6 +74,11 @@ YouWinUI.information = {
         end,
     },
     {
+        title = "New Discoveries",
+        color = function(G) return G.C.ORANGE end,
+        content = function(G) return fmt_num(G.get_run_discoveries and G:get_run_discoveries() or 0) end,
+    },
+    {
         title = "Seed",
         content = function(G)
             if G.SEED == nil then return "Unknown" end
@@ -109,51 +128,43 @@ function YouWinUI.drawTop(game)
     if love.graphics.getDimensions then
         screen_w, screen_h = love.graphics.getDimensions()
     end
-    local x_offset = 0
-    local panel_w, panel_h = 160, 204
-    local panel_x = math.floor((screen_w - panel_w) * 0.5) + x_offset
-    local panel_y = math.floor((screen_h - panel_h) * 0.5)
+    local panel_w, panel_h = math.min(384, screen_w - 16), 226
+    local panel_x = math.floor((screen_w - panel_w) * 0.5)
+    local panel_y = 7
     local C = (game and game.C) or G.C
 
-    local padding = 4
-
-    local winText = "You Win!"
-    local font_l = G.FONTS.PIXEL.LARGE
+    local padding = 8
     local font_s = G.FONTS.PIXEL.SMALL
-    local text_h = font_l:getHeight()
-    local text_y = panel_y + padding
 
     love.graphics.setColor(C.BLOCK.BACK)
     love.graphics.rectangle("fill", panel_x, panel_y, panel_w, panel_h, 4, 4)
     love.graphics.setColor(C.BOOSTER)
     love.graphics.rectangle("line", panel_x, panel_y, panel_w, panel_h, 4, 4)
 
-    love.graphics.setFont(font_l)
-    love.graphics.printf(winText, panel_x, text_y, panel_w, "center")
+    local new_count = #(game._newly_unlocked_jokers or {}) + #(game._newly_unlocked_vouchers or {})
+    TicketStrip.draw(game, {
+        x = panel_x + padding, y = panel_y + padding, w = panel_w - padding * 2, h = 38, stub_w = 70,
+        stub = "CLEARED", title = "You Win!",
+        detail = YouWinUI.quip(game)
+            .. (new_count > 0 and string.format("  %d new unlock%s", new_count, new_count == 1 and "" or "s") or ""),
+        stub_color = C.BOOSTER,
+        font = font_s,
+    })
 
-    local data_y = text_y + text_h + padding
-    local data_h = font_s:getHeight() + padding * 2
-    local tabW = 64
-
-    for _, info in ipairs(YouWinUI.information) do
+    local data_y = panel_y + 52
+    for i, info in ipairs(YouWinUI.information) do
         local title = info.title or "Unknown"
         local content = info.content and info.content(game) or "N/A"
+        if title == "Best Hand" and game._run_record_flags and game._run_record_flags.c_best_hand_chips then
+            content = tostring(content) .. "  NEW"
+        end
         local color = info.color and info.color(game) or C.WHITE
-
-        love.graphics.setColor(C.LIGHT_GREY)
-        draw_rect_with_shadow(panel_x + padding, data_y, panel_w - padding * 2, data_h, 4, 4, C.LIGHT_GREY, C.GREY, 2)
-
-        love.graphics.setFont(font_s)
-        love.graphics.setColor(C.WHITE)
-        love.graphics.printf(title, panel_x + padding, data_y + padding, panel_w - tabW - padding * 2, "center")
-
-        love.graphics.setColor(C.BLOCK.BACK)
-        love.graphics.rectangle("fill", panel_x + panel_w - tabW - padding * 2, data_y + padding, tabW, data_h - padding * 2, 4, 4)
-
-        love.graphics.setColor(color)
-        love.graphics.printf(content, panel_x + panel_w - tabW - padding * 2, data_y + padding, tabW, "center")
-
-        data_y = data_y + data_h + padding
+        TicketStrip.draw(game, {
+            x = panel_x + padding + (i % 2 == 0 and 8 or 0), y = data_y,
+            w = panel_w - padding * 2 - 8, h = 21, stub_w = 88,
+            stub = title, title = tostring(content), stub_color = color, font = font_s,
+        })
+        data_y = data_y + 23
     end
 end
 
@@ -183,13 +194,10 @@ function YouWinUI.drawBottom(game)
         local bw = panel_w - padding * 2
         local bh = button_h
 
-        love.graphics.setColor(color)
-        draw_rect_with_shadow(bx, by, bw, bh, 4, 4, color, C.BLOCK.SHADOW, 2)
-
-        love.graphics.setFont(font_m)
-        love.graphics.setColor(C.WHITE)
-        local text_y = by + math.floor((bh - font_m:getHeight()) * 0.5 + 0.5)
-        love.graphics.printf(text, bx, text_y, bw, "center")
+        TicketStrip.draw(game, {
+            x = bx, y = by, w = bw, h = bh, stub_w = 40,
+            stub = string.format("%02d", i), title = text, stub_color = color, font = font_m,
+        })
 
         game._you_win_button_rects[i] = { x = bx, y = by, w = bw, h = bh, index = i }
         button_y = button_y + button_h + padding
@@ -201,6 +209,7 @@ function YouWinUI.handle_touch(game, x, y)
         if game:_point_in_rect_simple(x, y, rect) then
             local button = YouWinUI.buttons[rect.index]
             if button and button.callback then
+                Sfx.play_button()
                 button.callback(game)
             end
             return true
@@ -211,12 +220,14 @@ end
 
 function YouWinUI.handle_button(game, btn)
     if game.is_menu_activate and game:is_menu_activate(btn) then
+        Sfx.play_button()
         if game.continue_from_you_win_endless then
             game:continue_from_you_win_endless()
         end
         return true
     end
     if game.is_menu_back and game:is_menu_back(btn) then
+        Sfx.play("cancel")
         if game.continue_from_you_win_main_menu then
             game:continue_from_you_win_main_menu()
         end

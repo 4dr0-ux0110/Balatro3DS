@@ -15,6 +15,7 @@ VOUCHER_DEFS = {
         description = "+1 card slot available in shop (to 4 slots)",
         pos = 9,
         tier = 2,
+        unlock = "Spend a total of $2500 at the shop",
         depends_on = "v_overstock",
     },
     v_clearance_sale = {
@@ -30,6 +31,7 @@ VOUCHER_DEFS = {
         description = "All cards and packs in shop are 50% off",
         pos = 12,
         tier = 2,
+        unlock = "Redeem at least 10 Vouchers in one run",
         depends_on = "v_clearance_sale",
     },
     v_hone = {
@@ -45,11 +47,12 @@ VOUCHER_DEFS = {
         description = "Foil, Holographic, and Polychrome\ncards appear 4X more often",
         pos = 13,
         tier = 2,
+        unlock = "Have at least 5 Joker cards with Foil, Holographic, or Polychrome edition",
         depends_on = "v_hone",
     },
     v_reroll = {
         id = "v_reroll",
-        name = "Reroll",
+        name = "Reroll Surplus",
         description = "Rerolls cost $2 less",
         pos = 17,
         tier = 1,
@@ -60,6 +63,7 @@ VOUCHER_DEFS = {
         description = "Rerolls cost an additional $2 less",
         pos = 26,
         tier = 2,
+        unlock = "Reroll the shop a total of 100 times",
         depends_on = "v_reroll",
     },
     v_crystal_ball = {
@@ -75,6 +79,7 @@ VOUCHER_DEFS = {
         description = "Spectral cards may appear in any\nof the Arcana Packs",
         pos = 28,
         tier = 2,
+        unlock = "Use a total of 25 Tarot cards from booster packs",
         depends_on = "v_crystal_ball",
     },
     v_telescope = {
@@ -90,6 +95,7 @@ VOUCHER_DEFS = {
         description = "Planet cards in your consumable area give\nX1.5 Mult for their specified poker hand",
         pos = 29,
         tier = 2,
+        unlock = "Use a total of 25 Planet cards from booster packs",
         depends_on = "v_telescope",
     },
     v_wasteful = {
@@ -239,14 +245,14 @@ VOUCHER_DEFS = {
     v_grabber = {
         id = "v_grabber",
         name = "Grabber",
-        description = "Permanently gain +1 hand per round ",
+        description = "Permanently gain +1 hand per round",
         pos = 5,
         tier = 1
     },
     v_nacho = {
         id = "v_nacho",
-        name = "Nacho Tongs",
-        description = "Permanently gain an additional +1 hand per round ",
+        name = "Nacho Tong",
+        description = "Permanently gain an additional +1 hand per round",
         pos = 14,
         tier = 2,
         unlock = "Play a total of 2500 cards",

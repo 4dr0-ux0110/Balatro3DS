@@ -1,8 +1,11 @@
 --- Main-menu Collection: category picker + paginated 5x3 grids.
 local CollectionCatalog = require("collection_catalog")
 local ShopUI = require("shop_ui")
+local PerformanceLab = require("performance_lab")
 
 local CollectionUI = {}
+
+PerformanceLab.register("collection_batch", { available = true, label = "Hidden-card batch" })
 
 local SCREEN_W, SCREEN_H = 320, 240
 local TOP_W, TOP_H = 400, 240
@@ -278,6 +281,7 @@ function CollectionUI.open(game)
     end
     CollectionUI.destroy_grid(game)
     CollectionUI.clear_tooltips(game)
+    Sfx.play("paper1")
 end
 
 function CollectionUI.open_category(game, category_id)
@@ -286,6 +290,7 @@ function CollectionUI.open_category(game, category_id)
     game._collection_page = 1
     CollectionUI.clear_tooltips(game)
     CollectionUI.build_grid(game)
+    Sfx.play("paper1")
 end
 
 function CollectionUI.back_from_grid(game)
@@ -293,14 +298,25 @@ function CollectionUI.back_from_grid(game)
     CollectionUI.clear_tooltips(game)
     game._menu_sub_state = "collection_menu"
     game._collection_category = nil
+    Sfx.play("cancel")
 end
 
 function CollectionUI.back_to_main(game)
     CollectionUI.destroy_grid(game)
     CollectionUI.clear_tooltips(game)
     game._collection_open = false
-    game._menu_sub_state = "main"
     game._collection_category = nil
+    -- Opened from a paused run, "back" belongs to the pause menu rather than the main menu;
+    -- the run is still underneath. The reference reaches its collection from the same
+    -- in-run options overlay (`UI_definitions.lua:2223`).
+    if game._collection_over_run then
+        game._collection_over_run = nil
+        game._menu_sub_state = nil
+        game._pause_focus_index = 1
+    else
+        game._menu_sub_state = "main"
+    end
+    Sfx.play("cancel")
 end
 
 function CollectionUI.page_count(game)
@@ -372,6 +388,40 @@ function CollectionUI.slot_position(m, index_one_based, count_on_page)
     return x, y
 end
 
+--- First and last slot index of the row that `index` sits in.
+---
+--- The reference builds its collection out of one CardArea per row and never hands a card
+--- between them (`reference/Balatro/functions/UI_definitions.lua:3539`), so a card being
+--- dragged reorders inside its own row and springs back to it however far up or down the
+--- screen it is let go.
+---@return integer first, integer last
+local function row_span_for_index(m, index, count)
+    local row = math.floor((index - 1) / m.cols)
+    local first = row * m.cols + 1
+    local last = math.min(count, first + m.cols - 1)
+    return first, last
+end
+
+--- Slot in `index`'s row whose centre is nearest `x`.
+---@param m table grid metrics
+---@param count integer items on the page
+---@param index integer the dragged node's current slot
+---@param x number screen x of the dragged card's centre
+---@return integer slot
+function CollectionUI.slot_index_from_x(m, count, index, x)
+    local first, last = row_span_for_index(m, index, count)
+    local best_i, best_d = index, math.huge
+    for i = first, last do
+        local sx = CollectionUI.slot_position(m, i, count)
+        local d = math.abs(x - (sx + CARD_W * 0.5))
+        if d < best_d then
+            best_d = d
+            best_i = i
+        end
+    end
+    return best_i
+end
+
 function CollectionUI.destroy_grid(game)
     for _, node in ipairs(game._collection_nodes or {}) do
         if node then
@@ -383,6 +433,11 @@ function CollectionUI.destroy_grid(game)
     end
     game._collection_nodes = {}
     game._collection_node_entries = nil
+    if game._collection_hidden_batch and game._collection_hidden_batch.release then
+        pcall(function() game._collection_hidden_batch:release() end)
+    end
+    game._collection_hidden_batch = nil
+    game._collection_hidden_batch_atlas = nil
 end
 
 function CollectionUI.spawn_node_for_entry(game, entry, x, y, m)
@@ -472,15 +527,11 @@ function CollectionUI.build_grid(game)
             game:ensure_asset_atlas_loaded("Booster")
         elseif category == "tags" or category == "blinds" then
             game:ensure_asset_atlas_loaded("tags")
-        elseif category == "tarots" then
-            game:ensure_asset_atlas_loaded("Tarot")
-        elseif category == "planets" then
-            game:ensure_asset_atlas_loaded("Planet")
-        elseif category == "spectrals" then
-            game:ensure_asset_atlas_loaded("Spectral")
         elseif category == "enhanced" or category == "seals" then
             game:ensure_asset_atlas_loaded("centers")
-            game:ensure_asset_atlas_loaded("cards")
+            -- These entries draw real playing cards, so they need the rank/suit overlay
+            -- too. The accessibility setting chooses the ordinary or high-contrast sheet.
+            game:ensure_asset_atlas_loaded(game:get_playing_card_atlas_name())
         elseif category == "jokers" or category == "editions" then
             game:ensure_asset_atlas_loaded("centers")
         end
@@ -514,7 +565,10 @@ function CollectionUI.build_grid(game)
     end
 end
 
-function CollectionUI.layout_grid(game)
+--- Put every node back on its slot. Targets only, so the cards spring across; pass
+--- `snap` when the grid is being built or paged and there is nothing to animate from.
+---@param snap boolean|nil
+function CollectionUI.layout_grid(game, snap)
     local count = tonumber(game._collection_page_count) or #(game._collection_nodes or {})
     if count <= 0 then return end
     local m = CollectionUI.grid_metrics(count)
@@ -523,14 +577,49 @@ function CollectionUI.layout_grid(game)
             local x, y = CollectionUI.slot_position(m, i, count)
             node.T.x = x
             node.T.y = y
-            node.VT.x = x
-            node.VT.y = y
             node.T.r = 0
-            node.VT.r = 0
             node.T.scale = 1
-            node.VT.scale = 1
+            if snap then
+                node.VT.x = x
+                node.VT.y = y
+                node.VT.r = 0
+                node.VT.scale = 1
+            end
         end
     end
+end
+
+--- Reorder live while a collection card is dragged.
+---
+--- The reference re-sorts a CardArea by card centre every frame and lays out everything except
+--- the card under the finger (`reference/Balatro/cardarea.lua:410`), so the row opens a gap as
+--- you pass over it rather than resolving on release. This is the same thing driven off touch
+--- moves instead of a per-frame sort, which costs nothing on the frames where nothing changed.
+---@return boolean moved this frame
+function CollectionUI.update_drag_reorder(game, node)
+    local nodes = game._collection_nodes
+    if not node or not nodes or not node.VT then return false end
+    local count = tonumber(game._collection_page_count) or #nodes
+    if count <= 1 then return false end
+
+    local from_idx
+    for i, n in ipairs(nodes) do
+        if n == node then from_idx = i break end
+    end
+    if not from_idx then return false end
+
+    local m = CollectionUI.grid_metrics(count)
+    local centre_x = node.VT.x + node.VT.w * (node.VT.scale or 1) * 0.5
+    local to_idx = CollectionUI.slot_index_from_x(m, count, from_idx, centre_x)
+    if to_idx == from_idx then return false end
+
+    table.remove(nodes, from_idx)
+    table.insert(nodes, to_idx, node)
+    CollectionUI.layout_grid(game, false)
+    -- The click the reference plays whenever a card lands somewhere new in an area
+    -- (`cardarea.lua:140`).
+    Sfx.play("cardSlide1", 1.05, 0.5)
+    return true
 end
 
 function CollectionUI.draw_category_menu(game)
@@ -638,8 +727,43 @@ end
 
 function CollectionUI.draw_grid_nodes(game)
     local front = game.dragging or game._collection_draw_front_node
+    local batch_hidden = PerformanceLab.is_enabled("collection_batch") and front == nil
+    local hidden_batch = nil
+    if batch_hidden and game.ensure_asset_atlas_loaded and love.graphics.newSpriteBatch then
+        local atlas = game:ensure_asset_atlas_loaded("centers")
+        if atlas and atlas.image then
+            if not game._collection_hidden_batch or game._collection_hidden_batch_atlas ~= atlas.image then
+                if game._collection_hidden_batch and game._collection_hidden_batch.release then
+                    pcall(function() game._collection_hidden_batch:release() end)
+                end
+                game._collection_hidden_batch = love.graphics.newSpriteBatch(atlas.image, PER_PAGE * 2)
+                game._collection_hidden_batch_atlas = atlas.image
+            end
+            hidden_batch = game._collection_hidden_batch
+            hidden_batch:clear()
+            local back_quad, px, py = atlas_quad_for_index(atlas, 1)
+            local overlay_quad = atlas_quad_for_index(atlas, UNDISCOVERED_OVERLAY_INDEX)
+            if back_quad and overlay_quad then
+                for _, node in ipairs(game._collection_nodes or {}) do
+                    if node and node._collection_hidden then
+                        local x = node.VT.x + (node.collision_offset and node.collision_offset.x or 0)
+                        local y = node.VT.y + (node.collision_offset and node.collision_offset.y or 0)
+                        local s = math.min((node.VT.w * node.VT.scale) / px,
+                            (node.VT.h * node.VT.scale) / py)
+                        hidden_batch:add(back_quad, x, y, 0, s, s)
+                        hidden_batch:add(overlay_quad, x, y, 0, s, s)
+                    end
+                end
+            end
+        end
+    end
+
+    if hidden_batch and hidden_batch:getCount() > 0 then
+        love.graphics.setColor(1, 1, 1, 1)
+        love.graphics.draw(hidden_batch)
+    end
     for _, node in ipairs(game._collection_nodes or {}) do
-        if node and node ~= front and node.draw then
+        if node and node ~= front and node.draw and not (hidden_batch and node._collection_hidden) then
             node:draw()
         end
     end
@@ -713,6 +837,14 @@ function CollectionUI.toggle_tooltip(game, node)
     CollectionUI.set_draw_front_node(game, node)
 end
 
+--- Turn to a page of the grid. Callers do the bounds check; this just moves.
+local function show_page(game, page)
+    game._collection_page = page
+    CollectionUI.clear_tooltips(game)
+    CollectionUI.build_grid(game)
+    Sfx.play("highlight2", 0.685, 0.2)
+end
+
 function CollectionUI.handle_touch_menu(game, x, y)
     for _, rect in ipairs(game._collection_menu_rects or {}) do
         if rect.category and game:_point_in_rect_simple(x, y, rect) then
@@ -733,15 +865,11 @@ function CollectionUI.handle_touch_grid(game, x, y)
     local pages = CollectionUI.page_count(game)
 
     if page > 1 and game._collection_prev_rect and game:_point_in_rect_simple(x, y, game._collection_prev_rect) then
-        game._collection_page = page - 1
-        CollectionUI.clear_tooltips(game)
-        CollectionUI.build_grid(game)
+        show_page(game, page - 1)
         return true
     end
     if page < pages and game._collection_next_rect and game:_point_in_rect_simple(x, y, game._collection_next_rect) then
-        game._collection_page = page + 1
-        CollectionUI.clear_tooltips(game)
-        CollectionUI.build_grid(game)
+        show_page(game, page + 1)
         return true
     end
     return false
@@ -773,6 +901,7 @@ function CollectionUI.handle_touchmoved(game, id, x, y, dx, dy)
     if game._menu_sub_state ~= "collection_grid" then return end
     if game.dragging and game.dragging.touchmoved then
         game.dragging:touchmoved(id, x, y, dx, dy)
+        CollectionUI.update_drag_reorder(game, game.dragging)
     end
 end
 
@@ -790,7 +919,10 @@ function CollectionUI.handle_touchreleased(game, id, x, y)
     if released and dist < TAP_THRESHOLD then
         CollectionUI.toggle_tooltip(game, released)
     elseif released and dist >= TAP_THRESHOLD then
-        CollectionUI.layout_grid(game)
+        -- One last pass in case the finger crossed a slot boundary between the final move and
+        -- the release, then the card springs into the slot it opened up.
+        CollectionUI.update_drag_reorder(game, released)
+        CollectionUI.layout_grid(game, false)
         CollectionUI.clear_tooltips(game)
     end
     game.dragging = nil
@@ -815,21 +947,18 @@ function CollectionUI.handle_button(game, btn)
         elseif btn == "dpleft" or btn == "left" then
             local page = tonumber(game._collection_page) or 1
             if page > 1 then
-                game._collection_page = page - 1
-                CollectionUI.clear_tooltips(game)
-                CollectionUI.build_grid(game)
+                show_page(game, page - 1)
             end
         elseif btn == "dpright" or btn == "right" then
             local page = tonumber(game._collection_page) or 1
             local pages = CollectionUI.page_count(game)
             if page < pages then
-                game._collection_page = page + 1
-                CollectionUI.clear_tooltips(game)
-                CollectionUI.build_grid(game)
+                show_page(game, page + 1)
             end
         elseif game.is_menu_activate and game:is_menu_activate(btn) then
             local node = game._collection_tooltip_node
             if not node and game._collection_nodes and game._collection_nodes[1] then
+                Sfx.play_button()
                 CollectionUI.toggle_tooltip(game, game._collection_nodes[1])
             end
         end

@@ -50,7 +50,7 @@ DECK_DEFS = {
         pos = 17,
         unlocked = false,
         stake = 1,
-        unlock_condition = { type = "discover_amount", amount = 100, text = "Discover 10 Cards" },
+        unlock_condition = { type = "discover_amount", amount = 100, text = "Discover 100 Cards" },
         config = { joker_slots = 1, hands = -1 },
         description = "+1 Joker slot. -1 Hand per round.",
     },
@@ -172,11 +172,28 @@ DECK_DEFS = {
         description = "All card Ranks and Suits in deck are randomised.",
         special = "erratic",
     },
+    {
+        -- Challenge runs choose their cards from challenge_catalog.lua; this Back
+        -- only supplies the reference Challenge Deck card back (game.lua:644).
+        id = "b_challenge",
+        name = "Challenge Deck",
+        order = 16,
+        -- The port repacks the reference's 7x5 sheet into ten columns while preserving
+        -- linear order. `{x=0,y=4}` therefore remains index 28; index 32 is Purple Seal.
+        pos = 28,
+        unlocked = true,
+        stake = 1,
+        config = {},
+        description = "Used by Challenge runs.",
+        omit = true,
+    },
 }
 
 DECK_DEFS_BY_ID = {}
+DECK_SELECT_DEFS = {}
 for _, d in ipairs(DECK_DEFS) do
     DECK_DEFS_BY_ID[d.id] = d
+    if d.omit ~= true then DECK_SELECT_DEFS[#DECK_SELECT_DEFS + 1] = d end
 end
 
 STAKE_DEFS = {
@@ -233,7 +250,7 @@ STAKE_DEFS = {
             eternal_jokers = true,
             stake_discard = -1 
         },
-        description = "-1 Discard ",
+        description = "-1 Discard",
     },
     {
         id = "stake_purple",
@@ -365,14 +382,22 @@ function Game:apply_deck_config(deck_id)
     end
 end
 
---- Atlas cell index for the selected deck's playing-card back (`DECK_DEFS.pos` in `centers`).
-function Game:get_selected_deck_back_index()
-    local id = self.selected_deck_id or self._pending_deck_id or "b_red"
+--- Atlas cell index for a deck's playing-card back (`DECK_DEFS.pos` in `centers`).
+---@param id string|nil deck id; nil falls back to the run's deck, then the pending one
+---@return integer
+function Game:get_deck_back_index(id)
+    id = id or self.selected_deck_id or self._pending_deck_id or "b_red"
     local def = DECK_DEFS_BY_ID and DECK_DEFS_BY_ID[id]
     if not def and DECK_DEFS then
         def = DECK_DEFS[1]
     end
     return tonumber(def and def.pos) or 0
+end
+
+--- The back every playing card in the current run wears.
+---@return integer
+function Game:get_selected_deck_back_index()
+    return self:get_deck_back_index(nil)
 end
 
 function Game:refresh_playing_card_backs()
@@ -391,7 +416,8 @@ function Game:apply_stake_config(stake_id)
     self.selected_stake_order = def.order
     local cfg = def.config or {}
 
-    -- Green and Purple are handled by the Scoring Function
+    -- Green/Purple select their alternate ante tables (reference game.lua:2049-2057).
+    self._stake_ante_mult = tonumber(cfg.ante_mult) or 0
     self._stake_no_small_reward = cfg.no_small_reward or false -- Red
     self._stake_eternal_jokers = cfg.eternal_jokers or false -- Black
     self._stake_discard = cfg.stake_discard or 0 -- Blue
@@ -403,10 +429,11 @@ end
 
 function Game:_apply_erratic_deck()
     if not self.deck then return end
-    local suits = { "Hearts", "Clubs", "Diamonds", "Spades" }
     for _, c in ipairs(self.deck.cards or {}) do
-        c.rank  = math.random(2, 14)
-        c.suit  = suits[math.random(1, 4)]
+        -- The reference replaces each prototype with one full `G.P_CARDS` draw, rather than
+        -- rolling its rank and suit independently (`game.lua:2339-2343`).
+        local front = self:_random_reference_playing_card_front("erratic")
+        c.rank, c.suit = front.rank, front.suit
     end
 end
 
@@ -461,7 +488,7 @@ function Game:draw_deck_select_ui()
     love.graphics.setColor(self.C.WHITE)
     love.graphics.printf("Choose Deck", 0, 8, W, "center")
 
-    local deck_list = DECK_DEFS or {}
+    local deck_list = DECK_SELECT_DEFS or DECK_DEFS or {}
     local sel_idx   = tonumber(self._deck_select_idx) or 1
     local view_size = 5
     local scroll    = math.max(0, sel_idx - math.ceil(view_size / 2))
@@ -654,7 +681,7 @@ function Game:_confirm_run_selection()
 
     self._pending_deck_id = deck_def.id
     self._pending_stake_id = stake_def.id
-    self._menu_sub_state = nil
+    -- Retired by the first run-start step, under the cover (`Game:_run_start_leave_menu`).
 
     if self.start_new_run_from_main_menu then
         self:start_new_run_from_main_menu()
@@ -673,4 +700,3 @@ end
 function Game:_confirm_stake_selection()
     self:_confirm_run_selection()
 end
-
