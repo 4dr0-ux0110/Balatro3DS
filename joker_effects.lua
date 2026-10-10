@@ -1965,14 +1965,46 @@ local SPECIAL = {
 
 }
 
+--- Effects registered at runtime -- mod Jokers (`smods.lua`). Kept apart from SPECIAL so a mod
+--- can never replace a vanilla Joker's behaviour by registering under its id.
+local REGISTERED = {}
+
 function JokerEffects.get(joker)
     local def = joker and joker.def or {}
     local id = def.id
     if type(id) == "string" and SPECIAL[id] then
         return SPECIAL[id]
     end
+    if type(id) == "string" and REGISTERED[id] then
+        return REGISTERED[id]
+    end
     return nil
 end
+
+--- Register the effect for a Joker id. Fails on an id the vanilla table already owns.
+---@param id string
+---@param impl table `{ matches_trigger, apply_effect, query_retrigger?, tooltip_lines? }`
+---@return boolean ok
+function JokerEffects.register(id, impl)
+    if type(id) ~= "string" or type(impl) ~= "table" or SPECIAL[id] then return false end
+    REGISTERED[id] = impl
+    return true
+end
+
+function JokerEffects.unregister(id)
+    REGISTERED[id] = nil
+end
+
+--- The scoring helpers the vanilla effects use, for mod effects: each raises the same popup,
+--- cue and trigger bookkeeping a built-in Joker would. `ctx.VT` is the anchor for the popup.
+JokerEffects.add_mult = add_mult
+JokerEffects.add_chips = add_chips
+JokerEffects.mul_mult = mul_mult
+JokerEffects.add_money = add_money
+JokerEffects.add_round_win_money = add_round_win_money
+JokerEffects.rank_is_face = rank_is_face
+JokerEffects.is_suit = is_suit
+JokerEffects.has_hand_type = has_hand_type
 
 function JokerEffects.begin_apply_context(ctx)
     if type(ctx) ~= "table" then return end

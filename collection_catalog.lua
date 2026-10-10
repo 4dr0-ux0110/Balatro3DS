@@ -226,7 +226,8 @@ function CollectionCatalog.build_voucher_entries()
                 category = "vouchers",
                 node_kind = "voucher",
                 name = def.name or id,
-                order = tonumber(def.pos) or 9999,
+                -- Mod vouchers carry an explicit order; vanilla ones sort by sheet position.
+                order = tonumber(def.order) or tonumber(def.pos) or 9999,
                 def = def,
                 discovery_id = id,
                 description = def.description,
@@ -386,6 +387,10 @@ function CollectionCatalog.entry_tooltip_content(game, entry)
     return entry.name or "???", {}
 end
 
+--- Declared ahead of `invalidate_cache`: declared after it, the assignment there landed on a
+--- global and the real cache was never dropped.
+local _entries_cache = nil
+
 function CollectionCatalog.invalidate_cache()
     _entries_cache = nil
 end
@@ -436,7 +441,6 @@ function CollectionCatalog.build_blind_entries()
     return out
 end
 
-local _entries_cache = nil
 
 function CollectionCatalog.all_entries_by_category()
     if _entries_cache then return _entries_cache end

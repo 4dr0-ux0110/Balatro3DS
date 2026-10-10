@@ -36,7 +36,10 @@ local _sprite_generation = 0
 local function consumable_load_sprite(index)
     local entry = _sprite_cache[index]
     if not entry then
-        local path = string.format("%s%03d.png", CONSUMABLE_SPRITE_DIR, index)
+        -- A mod consumable names its own image by sprite key (`smods.lua`); it is cached,
+        -- counted and freed exactly like a vanilla one.
+        local path = (type(index) == "string" and SMODS and SMODS.sprite_path(index))
+            or string.format("%s%03d.png", CONSUMABLE_SPRITE_DIR, tonumber(index) or 0)
         local ok, image = pcall(love.graphics.newImage, path, { dpiscale = 1, mipmaps = false })
         local err = ok and nil or image
         if not ok then
@@ -173,6 +176,13 @@ end
 ---@return number
 function Consumable.sprite_index_for(def)
     if type(def) ~= "table" then return 0 end
+    if def.mod_sprite then
+        -- A mod consumable's own image (`smods.lua`), or its negative one when it has it.
+        if consumable_normalize_edition(def.edition) == "negative" and def.mod_negative_sprite then
+            return def.mod_negative_sprite
+        end
+        return def.mod_sprite
+    end
     local index = tonumber(def.index) or 0
     if consumable_normalize_edition(def.edition) == "negative" then
         index = index + NEGATIVE_CONSUMABLE_INDEX_OFFSET
@@ -378,6 +388,12 @@ end
 ---@return string[]
 function Consumable:get_tooltip_body_lines()
     local def = self.def or {}
+    if def.mod_id and SMODS and SMODS.tooltip_lines then
+        -- `card.ability` is the owned copy's state; a pack or collection card reads its config.
+        local card = { ability = def.ability or def.config or {}, config = def }
+        local lines = SMODS.tooltip_lines(def.id, card)
+        if type(lines) == "table" and #lines > 0 then return lines end
+    end
     if def.id == "tarot_fool" and G then
         local out = static_tooltip_lines(def)
         local last_id = G.last_consumable_use_id
@@ -477,7 +493,11 @@ function Consumable:draw_tooltip(draw_x, draw_y)
 
     local resolved = {}
     for _, line in ipairs(lines) do
-        resolved[#resolved + 1] = TooltipDraw.build_segments_from_text(line)
+        if type(line) == "table" and type(line.segments) == "table" then
+            resolved[#resolved + 1] = line.segments
+        else
+            resolved[#resolved + 1] = TooltipDraw.build_segments_from_text(line)
+        end
     end
 
     TooltipDraw.draw_tooltip_layout(

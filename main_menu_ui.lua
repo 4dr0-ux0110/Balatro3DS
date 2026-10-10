@@ -532,6 +532,8 @@ function MainMenuUI._draw_bottom_panel(game)
         ProfileUI.draw_bottom(game)
     elseif game._menu_sub_state == "stats" then
         ProfileUI.draw_stats(game)
+    elseif game._menu_sub_state == "mods" then
+        require("mods_ui").draw(game)
     elseif game._menu_sub_state == "challenges" then
         MainMenuUI.draw_challenges(game)
     elseif game._menu_sub_state == "benchmark" then
@@ -587,6 +589,7 @@ local MENU_PAGES = {
             { kind = "settings",    label = "Settings",    colour = "BOOSTER" },
             { kind = "stats",       label = "Stats",       colour = "ORANGE" },
             { kind = "profile",     label = "Profile",     colour = "MULT" },
+            { kind = "mods",        label = "Mods",        colour = "PURPLE" },
             -- Not a base-game entry. The touch and gamepad schemes are this port's own, so the
             -- page that explains them lives with the other settings rather than at the top level.
             { kind = "how_to_play", label = "How to Play", colour = "MULT" },
@@ -640,11 +643,16 @@ function MainMenuUI.draw_main(game)
     local is_root = page_name == "main"
 
     local btn_w, btn_h, btn_gap = 160, 28, 6
+    -- Top and bottom padding inside the panel, together.
+    local pad = 40
+    -- Five or more entries (Options in a dev build) do not fit 240 px at full size above the
+    -- footer; tighten the column rather than run the title off the top of the screen.
+    if #entries >= 5 then btn_h, btn_gap, pad = 22, 4, 30 end
     local title_h = page.title and 22 or 0
     -- The root menu carries the profile chip in its footer; a sub-page carries Back instead.
     local foot_h = 28
     local panel_w = 220
-    local panel_h = title_h + #entries * btn_h + (#entries - 1) * btn_gap + 40
+    local panel_h = title_h + #entries * btn_h + (#entries - 1) * btn_gap + pad
     local panel_x = math.floor((320 - panel_w) * 0.5 + 0.5)
     local panel_y = math.floor((240 - foot_h - 8 - panel_h) * 0.5 + 0.5)
 
@@ -661,7 +669,7 @@ function MainMenuUI.draw_main(game)
         return r.y + math.floor((r.h - font_m:getHeight()) * 0.5 + 0.5)
     end
 
-    local y = panel_y + 20
+    local y = panel_y + math.floor(pad / 2)
     if page.title then
         love.graphics.setFont(font_m)
         love.graphics.setColor(C.WHITE)
@@ -775,6 +783,9 @@ function MainMenuUI.activate_menu_entry(game, kind)
         return true
     elseif kind == "stats" then
         ProfileUI.open_stats(game)
+        return true
+    elseif kind == "mods" then
+        require("mods_ui").open(game)
         return true
     elseif kind == "profile" then
         ProfileUI.open(game)
@@ -1450,6 +1461,9 @@ function MainMenuUI.handle_touch(game, x, y)
     if game._menu_sub_state == "stats" then
         return ProfileUI.handle_stats_touch(game, x, y)
     end
+    if game._menu_sub_state == "mods" then
+        return require("mods_ui").handle_touch(game, x, y)
+    end
     if game._menu_sub_state == "challenges" then
         return MainMenuUI._touch_challenges(game, x, y)
     end
@@ -1580,6 +1594,8 @@ function MainMenuUI.handle_button(game, btn)
         ProfileUI.handle_button(game, btn)
     elseif game._menu_sub_state == "stats" then
         ProfileUI.handle_stats_button(game, btn)
+    elseif game._menu_sub_state == "mods" then
+        require("mods_ui").handle_button(game, btn)
     elseif game._menu_sub_state == "challenges" then
         MainMenuUI._button_challenges(game, btn)
     elseif game._menu_sub_state == "benchmark" then

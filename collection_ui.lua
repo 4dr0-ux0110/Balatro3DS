@@ -122,20 +122,13 @@ function CollectionStaticNode:draw()
         draw_deck_collection_sprite(G, entry.def, draw_x, draw_y, dw, dh)
     elseif kind == "voucher" then
         local def = entry.def
-        if G and G.ensure_asset_atlas_loaded then
-            local atlas = G:ensure_asset_atlas_loaded("Voucher")
-            if atlas and atlas.image and def then
-                local px = tonumber(atlas.px) or 72
-                local py = tonumber(atlas.py) or 95
-                local idx = tonumber(def.pos) or 0
-                local iw, ih = atlas.image:getDimensions()
-                local cols = math.max(1, math.floor(iw / px))
-                local col = idx % cols
-                local row = math.floor(idx / cols)
-                local quad = love.graphics.newQuad(col * px, row * py, px, py, iw, ih)
+        if G and G.voucher_sprite and def then
+            -- Vanilla sheet or a mod atlas cell (`Game:voucher_sprite`).
+            local image, quad, _, _, px, py = G:voucher_sprite(def)
+            if image and quad then
                 local s = math.min(dw / px, dh / py)
                 love.graphics.setColor(1, 1, 1, 1)
-                love.graphics.draw(atlas.image, quad, draw_x, draw_y, 0, s, s)
+                love.graphics.draw(image, quad, draw_x, draw_y, 0, s, s)
             end
         end
     elseif kind == "booster" then

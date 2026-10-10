@@ -149,6 +149,10 @@ end
 ---@return string|nil
 function Joker.sprite_key_from_pos(atlas_name, index, edition)
     if not atlas_name then return nil end
+    -- A mod Joker's own image (`smods.lua`): its `pos` names the sprite key directly. Its
+    -- negative art, when it has some, comes in through `def.negative_pos` instead.
+    local mod_key = SMODS and SMODS.sprite_key and SMODS.sprite_key(atlas_name, index)
+    if mod_key then return mod_key end
     local atlas = tostring(atlas_name)
     local set = string.find(atlas, "Joker2", 1, true) and "2" or "1"
     local off = JOKER_PAGE_OFFSETS[atlas] or 0
@@ -173,6 +177,10 @@ function Joker.front_sprite_key_for(def, params)
     local atlas = (pos and pos.atlas) or "Joker1_p1"
     local index = (pos and pos.index) or 0
     local edition = type(params) == "table" and params.edition or nil
+    -- A mod Joker can name its own negative art (`smods.lua`, `negative_pos`).
+    if def.negative_pos and Joker.normalize_edition(edition) == "negative" then
+        return Joker.sprite_key_from_pos(def.negative_pos.atlas, def.negative_pos.index)
+    end
     return Joker.sprite_key_from_pos(atlas, index, edition)
 end
 
@@ -353,6 +361,11 @@ function Joker:init(X, Y, W, H, def, params)
     self.cost = base_cost + ec
 
     self.effect_config = self.def.config or {}
+    -- Mod Jokers keep their own copy of `config` as `card.ability`, Steamodded's per-card state.
+    if self.def.smods and SMODS and SMODS.init_ability then
+        SMODS.init_ability(self)
+        self.effect_config = self.ability
+    end
 
     local sticker_def = self.params and self.params.stickers or self.def and self.def.stickers
     if type(sticker_def) ~= "table" then sticker_def = nil end
@@ -433,7 +446,13 @@ end
 function Joker:refresh_quads()
     local old_front_sprite_key = self._front_atlas_ref_name
 
-    self.front_sprite_key = Joker.sprite_key_from_pos(self.front_atlas_name, self.front_index, self.edition)
+    local neg = self.def and self.def.negative_pos
+    if neg and Joker.normalize_edition(self.edition) == "negative" then
+        -- A mod Joker that ships negative art: draw that cell instead of the plain one.
+        self.front_sprite_key = Joker.sprite_key_from_pos(neg.atlas, neg.index)
+    else
+        self.front_sprite_key = Joker.sprite_key_from_pos(self.front_atlas_name, self.front_index, self.edition)
+    end
     self.front_sprite = resolve_joker_sprite(self.front_sprite_key)
     if Joker.normalize_edition(self.edition) == "negative" then
         if not self.front_sprite or not self.front_sprite.image then
@@ -452,8 +471,9 @@ function Joker:refresh_quads()
     if type(sub) == "table" and sub.atlas and sub.index ~= nil then
         self.sub_atlas_name = sub.atlas
         self.sub_index = tonumber(sub.index) or 0
-        if string.find(tostring(sub.atlas), "Joker", 1, true) then
-            self.sub_sprite_key = Joker.sprite_key_from_pos(sub.atlas, self.sub_index)
+        local mod_sub = SMODS and SMODS.sprite_key and SMODS.sprite_key(sub.atlas, sub.index)
+        if mod_sub or string.find(tostring(sub.atlas), "Joker", 1, true) then
+            self.sub_sprite_key = mod_sub or Joker.sprite_key_from_pos(sub.atlas, self.sub_index)
             self.sub_sprite = resolve_joker_sprite(self.sub_sprite_key)
             self.sub_atlas = nil
             self.sub_quad = nil
@@ -906,6 +926,10 @@ function Joker:get_tooltip_body_lines()
             table.insert(lines, el)
         end
         return lines
+    end
+    if type(def.mod_tooltip) == "function" then
+        local lines = def.mod_tooltip(self)
+        if type(lines) == "table" and #lines > 0 then return append_extra(lines) end
     end
     if type(def.tooltip) == "table" then
         local out = {}

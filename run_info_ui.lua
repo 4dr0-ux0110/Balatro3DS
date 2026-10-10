@@ -44,7 +44,7 @@ function RunInfoUI.owned_vouchers(game)
         local def = VOUCHER_DEFS and VOUCHER_DEFS[id]
         if type(def) ~= "table" then return end
         seen[id] = true
-        out[#out + 1] = { id = id, name = def.name or id, description = def.description or "", pos = def.pos }
+        out[#out + 1] = { id = id, name = def.name or id, description = def.description or "", pos = def.pos, def = def }
     end
     local vs = (game and game.vouchers) or {}
     -- Both shapes are in use: an ordered list, and a set keyed by id.
@@ -295,7 +295,18 @@ function RunInfoUI.draw_top(screen, game)
         local step, start_x = fanned_step(#vouchers, VOUCHER_AREA_W, card_w, 4)
         for i, v in ipairs(vouchers) do
             local vx = VOUCHER_AREA_X + start_x + (i - 1) * step
-            if not draw_atlas_cell(game, "Voucher", tonumber(v.pos) or 0, vx, VOUCHER_Y, VOUCHER_SCALE) then
+            local drawn = false
+            if v.def and v.def.mod_sprite and game.voucher_sprite then
+                local image, quad = game:voucher_sprite(v.def)
+                if image and quad then
+                    love.graphics.setColor(1, 1, 1, 1)
+                    love.graphics.draw(image, quad, vx, VOUCHER_Y, 0, VOUCHER_SCALE, VOUCHER_SCALE)
+                    drawn = true
+                end
+            else
+                drawn = draw_atlas_cell(game, "Voucher", tonumber(v.pos) or 0, vx, VOUCHER_Y, VOUCHER_SCALE)
+            end
+            if not drawn then
                 love.graphics.setColor(game.C.VOUCHER)
                 draw_rounded_rect(vx, VOUCHER_Y, card_w, VOUCHER_CELL_H * VOUCHER_SCALE, 4, 0, "fill")
                 love.graphics.setColor(game.C.WHITE)

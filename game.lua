@@ -31,6 +31,7 @@ local TutorialUI = require("tutorial_ui")
 local TicketStrip = require("ticket_strip")
 local Milestones = require("milestone_queue")
 local CardArt = require("card_art")
+local ModLoader = require("mod_loader")
 
 --- Seconds between revealing each payout line on the round-win screen.
 ---
@@ -720,6 +721,7 @@ function Game:get_effective_hand_size_limit()
     limit = limit + (tonumber(self.hand_size_delta_spectral) or 0)
     limit = limit + (tonumber(self.hand_size_delta_voucher) or 0)
     limit = limit + (tonumber(self.hand_size_delta_juggle) or 0)
+    limit = limit + SMODS.modifier_total(self, "h_size")
     for _, j in ipairs(self.jokers or {}) do
         local id = j and j.def and j.def.id
         if id == "j_juggler" then limit = limit + 1 end
@@ -747,6 +749,7 @@ function Game:get_effective_hands_per_round()
     if self:has_voucher("v_grabber") then hands = hands + 1 end
     if self:has_voucher("v_nacho") then hands = hands + 1 end
     hands = hands + (self.deck_hands or 0)
+    hands = hands + SMODS.modifier_total(self, "hands")
     for _, j in ipairs(self.jokers or {}) do
         local id = j and j.def and j.def.id
         if id == "j_burglar" then hands = hands + 3 end
@@ -761,6 +764,7 @@ function Game:get_effective_discards_per_round()
     if self:has_voucher("v_recyclomancy") then discards = discards + 1 end
     if self:has_voucher("v_petroglyph") then discards = discards - 1 end
     discards = discards  + (self.deck_discards or 0) + (self._stake_discard or 0)
+    discards = discards + SMODS.modifier_total(self, "d_size")
     for _, j in ipairs(self.jokers or {}) do
         local id = j and j.def and j.def.id
         if id == "j_drunkard" then discards = discards + 1 end
@@ -1836,7 +1840,9 @@ function Game:updateTagList()
 end
 
 function Game:_is_managed_joker_sprite_key(name)
-    return type(name) == "string" and string.sub(name, 1, 6) == "Jokers"
+    if type(name) ~= "string" then return false end
+    -- A mod Joker's own image (`smods.lua`) is counted and freed exactly like a vanilla one.
+    return string.sub(name, 1, 6) == "Jokers" or SMODS.sprite_path(name) ~= nil
 end
 
 function Game:_inc_atlas_owner(name)
@@ -4817,6 +4823,8 @@ function Game:build_run_snapshot()
                 random_rank = j.random_rank,
                 sort_id = j._sort_id,
                 random_hand = j.random_hand,
+                -- A mod Joker's per-copy `card.ability` (`smods.lua`).
+                ability = j.ability and SMODS.deep_copy(j.ability) or nil,
             }
         end
     end
@@ -4897,6 +4905,9 @@ function Game:build_run_snapshot()
         jokers_on_bottom = self.jokers_on_bottom == true,
         consumables_on_bottom = self.consumables_on_bottom == true,
         jokers = jokers,
+        -- The mods this run was played with. A run can only be continued with the same set
+        -- (`ModLoader.compare`): its Jokers, shop and pools depend on them.
+        mods = ModLoader.fingerprint(),
         joker_shared_picks = copy_table(self.joker_shared_picks or {}),
         consumables = copy_table(self.consumables or {}),
         consumable_base_capacity = tonumber(self.consumable_base_capacity) or 2,
@@ -5168,6 +5179,10 @@ function Game:load_run_snapshot(snapshot)
                 j.perishable_counter = jrec.perishable_counter or 5
                 j.eternal = jrec.eternal
                 j.rental = jrec.rental
+                if type(jrec.ability) == "table" and j.ability then
+                    j.ability = SMODS.deep_copy(jrec.ability)
+                    j.effect_config = j.ability
+                end
                 if tonumber(jrec.sort_id) then
                     j._sort_id = tonumber(jrec.sort_id)
                     self._next_joker_sort_id = math.max(self._next_joker_sort_id, j._sort_id + 1)
@@ -5287,9 +5302,26 @@ function Game:load_run_snapshot(snapshot)
     return true
 end
 
+--- Whether a saved run's mods match what is installed. On a mismatch the run is kept, not
+--- discarded, and the Mods screen opens on what to install or remove to continue it.
+---@return boolean ok
+function Game:check_saved_run_mods(snapshot)
+    local diff = ModLoader.compare(type(snapshot) == "table" and snapshot.mods or nil)
+    if not diff then
+        self._mods_continue_block = nil
+        return true
+    end
+    self._mods_continue_block = diff
+    self._menu_sub_state = "mods"
+    self._mods_scroll = 0
+    if Sfx and Sfx.play then Sfx.play("cancel") end
+    return false
+end
+
 function Game:continue_saved_run_from_main_menu()
     local snapshot, err = self:read_run_snapshot()
     if not snapshot then return false, err end
+    if not self:check_saved_run_mods(snapshot) then return false, "mods_mismatch" end
     local ok, load_err = self:load_run_snapshot(snapshot)
     if ok then
         self:check_unlock("continue_game")
@@ -5314,7 +5346,7 @@ function Game:continue_saved_run_steps()
     return {
         function()
             snapshot = self:read_run_snapshot()
-            return snapshot ~= nil
+            return snapshot ~= nil and self:check_saved_run_mods(snapshot)
         end,
         function()
             if not self:load_run_snapshot(snapshot) then return false end
@@ -6181,6 +6213,9 @@ function Game:add_consumable(def_id, create_params, arrive_from)
     if not self:can_add_consumable(params) then return false end
 
     local copy = copy_table(def)
+    -- A mod consumable carries its own `card.ability` (`smods.lua`); a restored save brings
+    -- the one it had through `params`.
+    if def.mod_id and copy.ability == nil then copy.ability = copy_table(def.config or {}) end
     if type(params) == "table" then
         for k, v in pairs(params) do
             copy[k] = v
@@ -6231,6 +6266,7 @@ end
 function Game:get_effective_consumable_capacity()
     local cap = self.consumable_base_capacity or 2
     cap = cap + (self.deck_consumable_slots or 0)
+    cap = cap + SMODS.modifier_total(self, "consumable_slots")
     if self:has_voucher("v_crystal_ball") then
         cap = cap + 1
     end
@@ -6383,6 +6419,10 @@ function Game:consumable_use_enabled(idx)
     if not self:consumable_play_state_ok() then return false end
     local c = self.consumables and self.consumables[idx]
     if not c or type(c) ~= "table" then return false end
+    if c.mod_id then
+        local ok = SMODS.consumable_can_use(self, c)
+        if ok ~= nil then return ok end
+    end
 
     if c.kind == "tarot" then
         local need_hand = false
@@ -6620,6 +6660,30 @@ local REFERENCE_CONSUMABLE_POOL_ORDERS = {
     },
 }
 
+--- The draw order for a consumable type: the reference's, then any mod consumables of that
+--- type in registration order (`smods.lua`). Every roll indexes into this list, so with no mods
+--- it is exactly the reference list and seeds are unchanged; the mod cards only extend it.
+local consumable_order_cache = {}
+local function consumable_pool_order(kind)
+    local base = REFERENCE_CONSUMABLE_POOL_ORDERS[kind]
+    if not base then return nil end
+    local mods = {}
+    for id, def in pairs(CONSUMABLE_DEFS or {}) do
+        if type(def) == "table" and def.mod_id and def.kind == kind then mods[#mods + 1] = id end
+    end
+    if #mods == 0 then return base end
+    local cached = consumable_order_cache[kind]
+    if cached and cached.n == #mods then return cached.list end
+    table.sort(mods, function(a, b)
+        return (tonumber(CONSUMABLE_DEFS[a].index) or 0) < (tonumber(CONSUMABLE_DEFS[b].index) or 0)
+    end)
+    local list = {}
+    for _, id in ipairs(base) do list[#list + 1] = id end
+    for _, id in ipairs(mods) do list[#list + 1] = id end
+    consumable_order_cache[kind] = { n = #mods, list = list }
+    return list
+end
+
 --- Pick a random consumable of `kind`.
 ---
 --- Anything already in play is culled, which is what stops The High Priestess handing you two
@@ -6632,7 +6696,7 @@ local REFERENCE_CONSUMABLE_POOL_ORDERS = {
 ---@return string|nil
 function Game:random_consumable_id_of_kind(kind, exclude, key)
     exclude = exclude or {}
-    local pool = REFERENCE_CONSUMABLE_POOL_ORDERS[kind]
+    local pool = consumable_pool_order(kind)
     if not CONSUMABLE_DEFS or not pool then return nil end
     local allow_duplicates = self:hasJoker("j_ring_master")
     local function blocked(id)
@@ -6926,6 +6990,9 @@ function Game:apply_consumable_effect(c)
     local kind = c.kind
     local id = c.id
     if id then self:discover_item(id) end
+    -- A mod consumable runs its own effect. A mod Planet that names a hand falls through to
+    -- the levelling below first, and its `use` (if any) runs after that.
+    if c.mod_id and SMODS.use_consumable(self, c) then return end
     local hand = self.hand
     local function ordered_nodes()
         return (hand and hand.ordered_selected_nodes and hand:ordered_selected_nodes()) or {}
@@ -7184,6 +7251,7 @@ function Game:apply_consumable_effect(c)
             end
         end
         self:record_consumable_use_id(id)
+        if c.mod_id then SMODS.after_planet(self, c) end
         -- No cue of its own: the whole of a Planet is the level-up, and
         -- `begin_hand_levelup_flourish` owns that ladder. `timpani` belongs to the tarots that
         -- create cards (`card.lua:1376-1456`), not to levelling a hand.
@@ -10228,6 +10296,7 @@ function Game:joker_base_capacity()
         base = base + 1
     end
     base = base + (self.deck_joker_slots or 0)
+    base = base + SMODS.modifier_total(self, "joker_slots")
     return base
 end
 
@@ -10520,6 +10589,8 @@ function Game:add_joker_by_def(def_id, create_params, arrive_from)
     self:discover_item(def_id)
     self:discover_edition(merged.edition)
     self:check_unlock("modify_jokers")
+    -- A restored save already carries whatever the mod's add_to_deck changed.
+    if def.smods and not self._restoring_run_snapshot then SMODS.on_joker_added(j) end
 
     -- Snap immediately if we're not in a DPAD slide transition.
     if self.jokers_sliding ~= true then
@@ -11620,6 +11691,32 @@ function Game:_pack_rand_int(lo, hi)
     return self:random("pack", lo, hi)
 end
 
+--- The sprite for a voucher: the vanilla sheet's cell, or a mod voucher's own image.
+---@return love.Image|nil image
+---@return love.Quad|nil quad
+---@return number sx, number sy, number px, number py cell geometry within the image
+function Game:voucher_sprite(def)
+    if type(def) ~= "table" then return nil end
+    if def.mod_sprite then
+        -- A mod voucher's own image, drawn whole: the same full-image form Joker sprites use,
+        -- which is the one that matches on hardware whatever padding the t3x carries. Callers
+        -- scale it into the voucher slot.
+        local image = SMODS.image(def.mod_sprite)
+        if not image then return nil end
+        local iw, ih = image:getDimensions()
+        def._mod_quad = def._mod_quad or love.graphics.newQuad(0, 0, iw, ih, iw, ih)
+        return image, def._mod_quad, 0, 0, iw, ih
+    end
+    local pos = tonumber(def.pos)
+    if not pos then return nil end
+    local atlas = self:ensure_asset_atlas_loaded("Voucher")
+    if not (atlas and atlas.image) then return nil end
+    local px, py = tonumber(atlas.px) or 72, tonumber(atlas.py) or 95
+    local quad = ShopUI.cached_atlas_quad(atlas, pos, "_voucher_quads")
+    local cols = tonumber(atlas.cols) or 1
+    return atlas.image, quad, (pos % cols) * px, math.floor(pos / cols) * py, px, py
+end
+
 function Game:has_voucher(voucher_id)
     if type(voucher_id) ~= "string" or voucher_id == "" then return false end
     local vs = self.vouchers
@@ -11769,7 +11866,14 @@ function Game:_shop_voucher_candidate_ids(exclude_ids)
                 -- skip
             else
                 local tier = tonumber(def.tier) or 1
-                if tier == 2 then
+                if type(def.requires_all) == "table" then
+                    -- A mod voucher may require several (`smods.lua`).
+                    local ok = self:is_voucher_unlocked(vid)
+                    for _, req in ipairs(def.requires_all) do
+                        if not self:has_voucher(req) then ok = false end
+                    end
+                    if ok then candidates[#candidates + 1] = vid end
+                elseif tier == 2 then
                     local req = def.depends_on
                     if self:is_voucher_unlocked(vid)
                         and type(req) == "string" and req ~= "" and self:has_voucher(req) then
@@ -11813,6 +11917,26 @@ local REFERENCE_VOUCHER_ORDER = {
     "v_directors_cut", "v_retcon", "v_paint_brush", "v_palette",
 }
 
+--- The pool the shop rolls vouchers from: the reference's, then any mod vouchers in the order
+--- they were registered. With no mods it is exactly the reference list, so seeds are unchanged.
+local voucher_roll_cache = { n = -1, list = REFERENCE_VOUCHER_ORDER }
+local function voucher_roll_order()
+    local mods = {}
+    for vid, def in pairs(VOUCHER_DEFS or {}) do
+        if type(def) == "table" and def.mod_id then mods[#mods + 1] = vid end
+    end
+    if #mods == 0 then return REFERENCE_VOUCHER_ORDER end
+    if voucher_roll_cache.n == #mods then return voucher_roll_cache.list end
+    table.sort(mods, function(a, b)
+        return (tonumber(VOUCHER_DEFS[a].order) or 0) < (tonumber(VOUCHER_DEFS[b].order) or 0)
+    end)
+    local list = {}
+    for _, id in ipairs(REFERENCE_VOUCHER_ORDER) do list[#list + 1] = id end
+    for _, id in ipairs(mods) do list[#list + 1] = id end
+    voucher_roll_cache.n, voucher_roll_cache.list = #mods, list
+    return list
+end
+
 --- Pick one voucher without compacting the reference pool's unavailable slots.
 ---@return table|nil offer
 function Game:_roll_one_shop_voucher_offer(from_tag)
@@ -11824,8 +11948,9 @@ function Game:_roll_one_shop_voucher_offer(from_tag)
     end
     local eligible = {}
     for _, id in ipairs(self:_shop_voucher_candidate_ids(exclude)) do eligible[id] = true end
+    local order = voucher_roll_order()
     local available = 0
-    for _, id in ipairs(REFERENCE_VOUCHER_ORDER) do if eligible[id] then available = available + 1 end end
+    for _, id in ipairs(order) do if eligible[id] then available = available + 1 end end
     local pick = "v_blank"
     if available > 0 then
         local base_key = from_tag and "Voucher_fromtag"
@@ -11833,7 +11958,7 @@ function Game:_roll_one_shop_voucher_offer(from_tag)
         local attempt = 1
         while true do
             local key = attempt == 1 and base_key or base_key .. "_resample" .. attempt
-            local candidate = REFERENCE_VOUCHER_ORDER[self:random(key, 1, #REFERENCE_VOUCHER_ORDER)]
+            local candidate = order[self:random(key, 1, #order)]
             if eligible[candidate] then pick = candidate break end
             attempt = attempt + 1
         end
@@ -11993,6 +12118,14 @@ function Game:give_random_unowned_voucher()
 end
 
 function Game:apply_voucher_effect(id)
+    -- A mod voucher's `redeem` runs once, here. Its declared modifiers need nothing: they are
+    -- read from the voucher list wherever the port computes the number they change.
+    if SMODS.Centers[id] then
+        SMODS.redeem_voucher(id)
+        if self.refresh_consumable_capacity_from_negatives then self:refresh_consumable_capacity_from_negatives() end
+        if self.refresh_joker_capacity_from_negatives then self:refresh_joker_capacity_from_negatives() end
+        return
+    end
     if id == "v_wasteful" or id == "v_recyclomancy" then return end
     if id == "v_tarot_merchant" or id == "v_tarot_tycoon" then return end
     if id == "v_planet_merchant" or id == "v_planet_tycoon" then return end
@@ -12313,7 +12446,7 @@ end
 
 function Game:_roll_shop_queue_consumable_offer(wanted_kind)
     if type(CONSUMABLE_DEFS) ~= "table" then return nil end
-    local ids = REFERENCE_CONSUMABLE_POOL_ORDERS[wanted_kind] or {}
+    local ids = consumable_pool_order(wanted_kind) or {}
     if #ids == 0 then return nil end
     local allow_duplicates = self:hasJoker("j_ring_master")
     local function blocked(id)
@@ -12433,7 +12566,8 @@ function Game:shop_price_for_consumable_offer(def, kind_fallback)
         planet = 3,
         spectral = 4,
     }
-    local raw = (by_kind[kind] or 3) + (tonumber(self.inflation) or 0)
+    local base = tonumber(def.cost) or by_kind[kind] or 3
+    local raw = base + (tonumber(self.inflation) or 0)
     return self:apply_shop_discount_to_price(raw)
 end
 
@@ -13251,7 +13385,7 @@ function Game:_booster_build_choices(offer)
     end
 
     local function pool_choice(kind, append)
-        local ordered = REFERENCE_CONSUMABLE_POOL_ORDERS[kind]
+        local ordered = consumable_pool_order(kind)
         local available = 0
         for _, id in ipairs(ordered) do
             if not center_blocked(id, true) then available = available + 1 end
@@ -13760,6 +13894,10 @@ end
 
 function Game:pack_consumable_can_apply(c)
     if type(c) ~= "table" then return false end
+    if c.mod_id then
+        local ok = SMODS.consumable_can_use(self, c)
+        if ok ~= nil then return ok end
+    end
     local kind = c.kind
     if kind == "planet" then
         return true
@@ -15119,6 +15257,9 @@ function Game:remove_owned_joker_at(index, force, dissolve, dissolve_colour)
         return nil
     end
     table.remove(self.jokers, index)
+    if joker.def and joker.def.smods and not self._restoring_run_snapshot then
+        SMODS.on_joker_removed(joker)
+    end
     if dissolve then
         -- Already out of run state, so nothing reads it any more; the node just plays out.
         self:retain_dissolving_node(joker, dissolve_colour)
@@ -18342,7 +18483,8 @@ function Game:ensure_joker_sprite_loaded(key)
     if not entry then
         entry = {
             name = key,
-            path = "resources/textures/1x/Jokers/" .. key .. ".png",
+            -- A mod Joker's own image (`smods.lua`) loads and frees exactly like a vanilla one.
+            path = SMODS.sprite_path(key) or ("resources/textures/1x/Jokers/" .. key .. ".png"),
             image = nil,
             w = (Joker and Joker.SPRITE_W) or 70,
             h = (Joker and Joker.SPRITE_H) or 94,

@@ -43,6 +43,7 @@ require "popup"
 require "tag"
 require("deck_catalog")
 require("challenge_catalog")
+local ModLoader = require("mod_loader")
 Loading.step(0.42)
 local YouWinUI = require "you_win"
 local MainMenuUI = require "main_menu_ui"
@@ -105,7 +106,13 @@ function love.load()
     -- perf_flags.lua for why they are not simply on.
     PerfFlags.apply()
 
+    -- Mods register their Jokers into the catalogs before the game is built from them, so
+    -- pools, the collection and saves see a mod Joker exactly as they see a vanilla one.
+    ModLoader.load_all()
+
     G = Game()
+    -- Steamodded mods test `context.cardarea == G.play`; the port has no play area object.
+    G.play = G.play or SMODS.PLAY
     -- Binding pips are visible during play. Build their tiny texture under the loading
     -- screen, never from a visible UI frame.
     G:ensure_asset_atlas_loaded("gamepad_ui_3ds")

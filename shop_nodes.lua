@@ -87,35 +87,25 @@ function ShopVoucherNode:draw()
     local game = G
     if not game then return end
     local def = VOUCHER_DEFS and offer.id and VOUCHER_DEFS[offer.id]
-    local pos = def and tonumber(def.pos)
     local drew = false
     push_tilt(self, x, y, w, h)
-    if pos and game.ensure_asset_atlas_loaded and game.ASSET_ATLAS and game.ASSET_ATLAS.Voucher then
-        game:ensure_asset_atlas_loaded("Voucher")
-        local atlas = game.ASSET_ATLAS.Voucher
-        if atlas and atlas.image then
-            local px = tonumber(atlas.px) or 72
-            local py = tonumber(atlas.py) or 95
-            local quad = ShopUI.cached_atlas_quad(atlas, pos, "_voucher_quads")
-            if quad then
-                local s = math.min(w / px, h / py)
-                local dw, dh = px * s, py * s
-                local dx = x + math.floor((w - dw) * 0.5 + 0.5)
-                local dy = y + math.floor((h - dh) * 0.5 + 0.5)
-                love.graphics.setColor(1, 1, 1, 1)
-                love.graphics.draw(atlas.image, quad, dx, dy, 0, s, s)
-                -- The reference gives vouchers a moving sheen (`card.lua:4434-4492`). On
-                -- 3DS only the focused voucher gets the extra mesh pass, keeping a full
-                -- shelf from multiplying vertex work on the Old model.
-                if tonumber(game.active_tooltip_shop_voucher_slot) == tonumber(self.shop_voucher_slot) then
-                    local cols = tonumber(atlas.cols) or 1
-                    local sx = (pos % cols) * px
-                    local sy = math.floor(pos / cols) * py
-                    Fx.draw_shine_cell(atlas.image, sx, sy, px, py, dx, dy, dw, dh, Fx.time())
-                end
-                drew = true
-            end
+    -- Vanilla sheet or a mod atlas cell (`Game:voucher_sprite`).
+    local image, quad, sx, sy, px, py = nil, nil, 0, 0, 72, 95
+    if def and game.voucher_sprite then image, quad, sx, sy, px, py = game:voucher_sprite(def) end
+    if image and quad then
+        local s = math.min(w / px, h / py)
+        local dw, dh = px * s, py * s
+        local dx = x + math.floor((w - dw) * 0.5 + 0.5)
+        local dy = y + math.floor((h - dh) * 0.5 + 0.5)
+        love.graphics.setColor(1, 1, 1, 1)
+        love.graphics.draw(image, quad, dx, dy, 0, s, s)
+        -- The reference gives vouchers a moving sheen (`card.lua:4434-4492`). On
+        -- 3DS only the focused voucher gets the extra mesh pass, keeping a full
+        -- shelf from multiplying vertex work on the Old model.
+        if tonumber(game.active_tooltip_shop_voucher_slot) == tonumber(self.shop_voucher_slot) then
+            Fx.draw_shine_cell(image, sx, sy, px, py, dx, dy, dw, dh, Fx.time())
         end
+        drew = true
     end
     if not drew then
         love.graphics.setColor((game.C and game.C.VOUCHER) or { 0.5, 0.35, 0.55 })

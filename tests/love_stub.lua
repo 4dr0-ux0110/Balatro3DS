@@ -460,6 +460,14 @@ function stub.install()
                     info = { type = "file", size = #files[path], modtime = 0 }
                 elseif dirs[path] then
                     info = { type = "directory", size = 0, modtime = 0 }
+                else
+                    local prefix = path .. "/"
+                    for p in pairs(files) do
+                        if p:sub(1, #prefix) == prefix then
+                            info = { type = "directory", size = 0, modtime = 0 }
+                            break
+                        end
+                    end
                 end
                 if not info then return nil end
                 if filter and info.type ~= filter then return nil end
@@ -484,13 +492,19 @@ function stub.install()
             getDirectoryItems = function(path)
                 path = normalize(path)
                 local prefix = path == "" and "" or (path .. "/")
-                local out = {}
-                for p in pairs(files) do
-                    if p:sub(1, #prefix) == prefix then
-                        local rest = p:sub(#prefix + 1)
-                        if not rest:find("/") then out[#out + 1] = rest end
+                -- Files and subdirectories alike, as the real call lists them. A directory is
+                -- known either from `createDirectory` or from a file written somewhere under it.
+                local seen, out = {}, {}
+                local function add(p)
+                    if p:sub(1, #prefix) ~= prefix then return end
+                    local name = p:sub(#prefix + 1):match("^[^/]+")
+                    if name and not seen[name] then
+                        seen[name] = true
+                        out[#out + 1] = name
                     end
                 end
+                for p in pairs(files) do add(p) end
+                for p in pairs(dirs) do add(p) end
                 table.sort(out)
                 return out
             end,

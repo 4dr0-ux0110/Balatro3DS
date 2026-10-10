@@ -10,6 +10,10 @@
 --- high-contrast suit draws its number cards from `cards_2` and its faces from the collab's
 --- `_2` sheet, so the suit reads as one set whichever art it uses.
 ---
+--- Mods add sets of their own (`SMODS.DeckSkin`, `smods.lua`) through `CardArt.register`: same
+--- three-cell strip, same `_1` / `_2` pairing, but the files live in the mod's folder, so their
+--- entries carry their own paths. They join the end of their suit's carousel.
+---
 --- This module is pure: it knows the catalog and the rules, and the game owns the settings
 --- table and the live cards (`Game:set_card_art`).
 
@@ -87,8 +91,34 @@ end
 
 --- @return string
 function CardArt.sheet_path(suit, id, contrast)
+    -- A mod's set names its own files (`CardArt.register`).
+    local entry = CardArt.find(suit, id)
+    if entry and entry.path_1 then
+        return contrast and (entry.path_2 or entry.path_1) or entry.path_1
+    end
     return ("resources/textures/1x/collabs/%s/collab_%s_%d.png"):format(
         CardArt.suit_key(suit):lower(), id, contrast and 2 or 1)
+end
+
+--- Add a set of face cards to a suit's carousel.
+--- @param suit string
+--- @param entry table `{ id, name, path_1, path_2?, mod_id? }`; `path_2` is the high-contrast
+---   strip, and a set without one uses its normal strip at either contrast
+--- @return boolean ok false when the suit is unknown or the id is taken
+function CardArt.register(suit, entry)
+    local key = CardArt.suit_key(suit)
+    if not key or type(entry) ~= "table" or type(entry.id) ~= "string" then return false end
+    if CardArt.find(key, entry.id) then return false end
+    table.insert(CardArt.COLLABS[key], entry)
+    return true
+end
+
+--- Take a registered set back out.
+function CardArt.unregister(suit, id)
+    local list = CardArt.COLLABS[CardArt.suit_key(suit) or ""]
+    for i = #(list or {}), 1, -1 do
+        if list[i].id == id then table.remove(list, i) end
+    end
 end
 
 --- Asset-atlas entries for every collab sheet, in the shape `Game` registers `asset_atli`.

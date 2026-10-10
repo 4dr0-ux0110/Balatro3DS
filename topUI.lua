@@ -379,8 +379,13 @@ function TopUI:draw(screen)
         love.graphics.setColor(G.C.WHITE)
         -- Boss names run to "Crimson Heart" and "Verdant Leaf", which are wider than this block at
         -- MEDIUM; DynaText lays out per glyph off the current font, so the fit has to happen here.
-        love.graphics.setFont(Fonts.fit(G, G.FONTS.PIXEL.MEDIUM, blind_name, blind_name_w))
-        DynaText.draw(self.blind_name_text, blind_name, blind_name_x, iy - 2, blind_name_w, "center")
+        local name_font = Fonts.fit(G, G.FONTS.PIXEL.MEDIUM, blind_name, blind_name_w)
+        love.graphics.setFont(name_font)
+        -- Centre the glyph cell on the whole 20 px block, not on its padded interior: the MEDIUM
+        -- cell is 22 px with the baseline at row 16, so hanging it off the interior top put the
+        -- letters on the block's bottom edge and the float carried them past it.
+        local name_y = blindPosY + math.floor((blindHeight - name_font:getHeight()) / 2)
+        DynaText.draw(self.blind_name_text, blind_name, blind_name_x, name_y, blind_name_w, "center")
         
         love.graphics.setColor(blind_sign)
         ix, iy, iw, ih = draw_rounded_rect(blindPosX, blindPosY + blindHeight + 4, blindWidth, blindHeight * 3, 4, 4, "fill")
