@@ -18096,12 +18096,14 @@ function Game:set_render_settings()
         self.animation_atli = {
             {name = "blind_chips", path = "resources/textures/1x/BlindChips.png",px=36,py=36, cols=24, rows=28, frames = 21},
             {name = "shop_sign", path = "resources/textures/1x/ShopSignAnimation.png",px=113,py=60, cols=4, rows=1, frames = 4},
-            -- The menu backdrop is generated on the GPU now (`backdrop.lua`), so this sheet
-            -- is no longer loaded: it was 1024x1024, 2.5 MB on the card and 4 MiB resident,
-            -- and it was read back in on every entry to the home screen. `path` is nil so
-            -- `ensure_animation_atlas_loaded` returns the entry without touching the card;
-            -- the entry itself stays so anything walking this table sees the same shape.
-            {name = "menu", path = nil, px=128, py=128, cols=8, rows=8, frames = 63},
+            -- The menu backdrop is generated now (`backdrop.lua`), but only where the field is
+            -- affordable -- the Old 3DS is gated out. Everywhere it cannot draw, the menu
+            -- falls back to this prebaked 63-frame sheet: 1024x1024, 4 MiB resident, loaded
+            -- on entry to the home screen and freed on leaving it. Where the field does draw,
+            -- `path` is nil so `ensure_animation_atlas_loaded` never touches the card.
+            {name = "menu", path = (not require("backdrop").is_supported())
+                and "resources/textures/1x/menu.png" or nil,
+                px=128, py=128, cols=8, rows=8, frames = 63},
         }
         self.asset_atli = {
             -- Edition pattern sheets: structure only, colour comes from the vertex field.

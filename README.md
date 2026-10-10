@@ -6,7 +6,7 @@ It runs on [LövePotion](https://github.com/lovebrew/lovepotion), TurtleP's impl
 
 ## Installation
 
-The easiest way to install is using FBI. Open the [releases page](https://github.com/rosematcha/Balatro3DS/releases) and scan the QR code using FBI's "Remote Install" feature.
+The easiest way to install is using FBI. Open the [releases page](https://github.com/idkhan/Balatro3DS/releases) and scan the QR code using FBI's "Remote Install" feature.
 
 The CIA is unsigned, so installing it needs custom firmware with sigpatches. If you'd rather not install a title, the releases page also carries a `.3dsx`: drop it in the `3ds` folder at the root of your SD card and launch it from the Homebrew Launcher.
 

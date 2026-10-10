@@ -163,11 +163,11 @@ function MainMenuUI.draw_background(game, screen)
         return
     end
 
-    -- One draw call for the whole background, the field evaluated per vertex on the GPU. This
-    -- replaces a 63-frame 1024x1024 sheet that cost 4 MiB resident and was reloaded on every
-    -- entry to the menu. Returns false on any runtime without the binding -- desktop, nest --
-    -- and the gradient below is the fallback for exactly that case.
+    -- One draw call for the whole background, the field evaluated per vertex on the GPU.
+    -- Returns false wherever the field is unavailable -- the Old 3DS, desktop, nest, a stock
+    -- runtime -- and the prebaked sheet stands in. The gradient is for when that is missing too.
     if Backdrop.draw(w) then return end
+    if MainMenuUI.draw_background_atlas(game, screen) then return end
 
     do
         local top = G.C.MULT
@@ -189,13 +189,14 @@ function MainMenuUI.draw_background(game, screen)
     end
 end
 
---- Kept for reference builds that still ship the sheet; nothing calls it now.
+--- The prebaked menu animation, for wherever the generated backdrop cannot draw.
+--- @return boolean drawn false when the sheet is not loaded, so the caller can fall back
 function MainMenuUI.draw_background_atlas(game, screen)
     local w = (screen == "bottom") and 320 or 400
     local h = 240
     local atlas = game.ensure_animation_atlas_loaded
         and game:ensure_animation_atlas_loaded("menu")
-    if not atlas or not atlas.image then return end
+    if not atlas or not atlas.image then return false end
 
     local frame_count = tonumber(atlas.frames) or 16
     local frame = menu_ping_pong_frame(frame_count, MENU_ANIM_FPS)
@@ -204,7 +205,7 @@ function MainMenuUI.draw_background_atlas(game, screen)
     -- once per screen per frame for the whole time the menu is up (`game.lua`,
     -- `Game:atlas_cell_quad`).
     local quad, cell_w, cell_h = game:atlas_cell_quad(atlas, frame)
-    if not quad then return end
+    if not quad then return false end
 
     local s = math.max(w / cell_w, h / cell_h)
     local draw_w = cell_w * s
@@ -214,6 +215,7 @@ function MainMenuUI.draw_background_atlas(game, screen)
 
     love.graphics.setColor(1, 1, 1, 1)
     love.graphics.draw(atlas.image, quad, dx, dy, 0, s, s)
+    return true
 end
 
 --- Logo sheet geometry, declared rather than measured. `Image:getDimensions()` can report the

@@ -13,7 +13,7 @@ STAGE_DIR="$CACHE_DIR/stage"
 # Application metadata. Version tracks lovebrew.toml so there is one source of truth.
 APP_TITLE="Balatro"
 APP_DESCRIPTION="Balatro"
-APP_AUTHOR="rosematcha"
+APP_AUTHOR="Gazpacho, rosematcha"
 APP_VERSION="$(sed -n 's/^version[[:space:]]*=[[:space:]]*"\([^"]*\)".*/\1/p' "$REPO_ROOT/lovebrew.toml" | head -1)"
 APP_ICON="$REPO_ROOT/resources/textures/1x/icon.png"   # 48x48 png
 BANNER_IMAGE="$REPO_ROOT/banner.png"                   # 256x128 png, fallback
@@ -41,11 +41,8 @@ GAME_ROOT="Balatro3DS"
 # build; only m6x11plus is referenced (globals.lua), and its .bcfnt is already
 # checked in. Drop an entry from this list the moment something loads it.
 EXCLUDE_ASSETS=(
-    # The menu backdrop is generated on the GPU now (backdrop.lua plus
-    # dev/shaders/backdrop.v.pica), so its 63-frame sheet no longer ships. It was the largest
-    # asset in the game -- 1024x1024, 2.5 MB converted -- and it was read off the card on every
-    # entry to the home screen. Kept in the repository as the reference for the look.
-    "resources/textures/1x/menu.png"
+    # resources/textures/1x/menu.png is NOT excluded: the generated menu backdrop is gated to
+    # the New 3DS (backdrop.lua), and the Old 3DS draws that prebaked 63-frame sheet instead.
     "resources/fonts/GoNotoCJKCore.ttf"
     "resources/fonts/GoNotoCurrent-Bold.ttf"
     "resources/fonts/NotoSans-Bold.ttf"
