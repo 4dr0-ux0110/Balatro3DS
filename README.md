@@ -1,6 +1,8 @@
 # Balatro for Nintendo 3DS
 
-Forked from [a project by idkhan,](https://github.com/idkhan/Balatro3DS) this port of Balatro for Nintendo 3DS targets extreme accuracy to the original game.
+The poker roguelike. Balatro is a hypnotically satisfying deckbuilder where you play illegal poker hands, discover game-changing jokers, and trigger adrenaline-pumping, outrageous combos, now on the 3DS.
+
+This is a fan-made remake of Balatro. This project is in no way affiliated with LocalThunk, the creator of Balatro. All art and sound effects are originally from the game, only adapted to run on the 3DS hardware. If you want to support the creator or get the full Balatro experience, please buy the game.
 
 It runs on [LövePotion](https://github.com/lovebrew/lovepotion), TurtleP's implementation of the LÖVE API for homebrew consoles.
 
@@ -26,9 +28,9 @@ All six are rebindable from Options, and on a New 3DS you can bind ZL and ZR as 
 
 ## Performance notes
 
-**This port has only been tested for performance on a New 3DS,** as I do not have physical access to an original 3DS. Acceptable performance is presently not guaranteed on original 3DS models.
+**This port has been tested on both a New 3DS and Old 3DS**
 
-A few things are deliberately turned down or off on an original 3DS, which has a much less powerful CPU. The animated menu backdrop doesn't run at all, and some particle effects draw on a coarser grid.
+A few things are deliberately turned down or off on an original 3DS, which has a much less powerful CPU. Some particle effects draw on a coarser grid.
 
 ## Building it yourself
 
