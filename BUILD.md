@@ -1,5 +1,7 @@
 # Build Instructions
 
+**English** | [简体中文](BUILD.zh-CN.md)
+
 These instructions are provided for users to create and package a Balatro3DS.3dsx file manually on their own machine. Alternative building methods can be found on the [Lovebrew wiki](https://lovebrew.org). You will need to have devkitPro and their `3ds-dev` package installed for this process. You can find the instructions for that on the [devkitPro wiki](https://devkitpro.org/wiki/Getting_Started).
 
 Shoutout to @natesquared in the lovebrew discord, these steps are based on a similar set of instructions they gave to a different user.
