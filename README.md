@@ -32,6 +32,16 @@ All six are rebindable from Options, and on a New 3DS you can bind ZL and ZR as 
 
 A few things are deliberately turned down or off on an original 3DS, which has a much less powerful CPU. Some particle effects draw on a coarser grid.
 
+## Modding
+
+The game loads mods written in the [Steamodded](https://github.com/Steamodded/smods) style: a folder with a `.json` manifest and a Lua file that calls `SMODS.Joker { ... }` and friends. Mods can add Jokers, Tarots, Planets, Spectrals, Vouchers, and sets of face-card art for **Options → Art**.
+
+To install a mod, copy its folder into the `mods` folder the game creates next to its save files on the SD card, then restart. **Options → Mods** lists what loaded, and why anything didn't.
+
+A saved run remembers which mods it was played with. If those mods change, Continue shows what to install or remove; the run itself is kept.
+
+This isn't Steamodded itself. There's no Lovely, the PC game's internals aren't there, and the 3DS can't run shaders. Every card is its own `.t3x` image, and a Negative card needs its own art. [MODDING.md](MODDING.md) covers the full API, [`dev/example_mods/ExampleJokers`](dev/example_mods/ExampleJokers) is a working example, and `dev/make_negative.py` turns a card's image into its Negative version.
+
 ## Building it yourself
 
 `./dev/setup.sh` fetches devkitPro's 3DS packages, builds a patched LövePotion runtime, and pulls down the host tools it needs. `./dev/build.sh` then produces a CIA, or `./dev/build.sh 3dsx` a fused `.3dsx`; output lands in `dev/dist/`. [BUILD.md](BUILD.md) covers the older manual `.3dsx` recipe, which is aimed at end users rather than development.
