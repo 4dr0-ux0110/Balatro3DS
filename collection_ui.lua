@@ -530,8 +530,10 @@ function CollectionUI.build_grid(game)
         elseif category == "enhanced" or category == "seals" then
             game:ensure_asset_atlas_loaded("centers")
             -- These entries draw real playing cards, so they need the rank/suit overlay
-            -- too. The accessibility setting chooses the ordinary or high-contrast sheet.
-            game:ensure_asset_atlas_loaded(game:get_playing_card_atlas_name())
+            -- too, from whichever sheets the per-suit card art currently uses.
+            for _, name in ipairs(game:get_playing_card_atlas_names()) do
+                game:ensure_asset_atlas_loaded(name)
+            end
         elseif category == "jokers" or category == "editions" then
             game:ensure_asset_atlas_loaded("centers")
         end

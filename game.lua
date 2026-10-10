@@ -30,6 +30,7 @@ local VoucherUnlocks = require("voucher_unlocks")
 local TutorialUI = require("tutorial_ui")
 local TicketStrip = require("ticket_strip")
 local Milestones = require("milestone_queue")
+local CardArt = require("card_art")
 
 --- Seconds between revealing each payout line on the round-win screen.
 ---
@@ -2992,6 +2993,21 @@ function Game:build_pause_focus_targets()
             end
             return targets
         end
+        if self._pause_settings_tab == "art" then
+            -- Left/right on the carousel steps it instead of moving focus (`handle_gamepad_pause`).
+            for i, r in ipairs(self._art_suit_rects or {}) do
+                targets[#targets + 1] = { kind = "art_suit", index = i, rect = r }
+            end
+            for _, def in ipairs({
+                { "art_carousel", self._art_carousel_rect },
+                { "art_contrast", self._art_contrast_rect },
+                { "art_set", self._art_set_rect },
+                { "back", self._pause_back_rect },
+            }) do
+                if def[2] then targets[#targets + 1] = { kind = def[1], rect = def[2] } end
+            end
+            return targets
+        end
         if self._pause_settings_tab == "audio" then
             -- Left/right steps the focused slider's value instead of moving focus
             -- (`handle_gamepad_pause`), so the pad reaches them like a touch drag would.
@@ -3014,6 +3030,9 @@ function Game:build_pause_focus_targets()
         if self._pause_controls_open_rect then
             targets[#targets + 1] = { kind = "controls_open", rect = self._pause_controls_open_rect }
         end
+        if self._pause_art_open_rect then
+            targets[#targets + 1] = { kind = "art_open", rect = self._pause_art_open_rect }
+        end
         if self._pause_performance_open_rect then
             targets[#targets + 1] = { kind = "performance_open", rect = self._pause_performance_open_rect }
         end
@@ -3025,9 +3044,6 @@ function Game:build_pause_focus_targets()
         end
         if self._pause_joker_display_rect then
             targets[#targets + 1] = { kind = "joker_display", rect = self._pause_joker_display_rect }
-        end
-        if self._pause_high_contrast_rect then
-            targets[#targets + 1] = { kind = "high_contrast", rect = self._pause_high_contrast_rect }
         end
         if self._pause_skip_tutorial_rect then
             targets[#targets + 1] = { kind = "skip_tutorial", rect = self._pause_skip_tutorial_rect }
@@ -3105,9 +3121,17 @@ function Game:activate_pause_focus()
     elseif t.kind == "joker_display" then
         self:set_joker_display_enabled(not self:joker_display_enabled())
         return true
-    elseif t.kind == "high_contrast" then
-        self:set_high_contrast_cards(not self:high_contrast_cards_enabled())
+    elseif t.kind == "art_open" then
+        return self:open_card_art_panel()
+    elseif t.kind == "art_suit" then
+        self:art_select_suit(t.index)
         return true
+    elseif t.kind == "art_carousel" then
+        return self:art_cycle(1)
+    elseif t.kind == "art_contrast" then
+        return self:art_toggle_contrast()
+    elseif t.kind == "art_set" then
+        return self:art_apply()
     elseif t.kind == "skip_tutorial" then
         return self:skip_tutorial()
     elseif t.kind == "perf_toggle" and t.rect and t.rect.experiment_id then
@@ -3153,6 +3177,8 @@ function Game:activate_pause_focus()
             self:end_pause_slider_drag()
             self._pause_settings_tab = "general"
             self._pause_focus_index = 1
+        elseif self._pause_settings_tab == "art" then
+            self:close_card_art_panel()
         else
             self:leave_settings_panel()
         end
@@ -3210,6 +3236,17 @@ function Game:handle_gamepad_pause(button)
         self._pause_focus_index = 1
         return true
     end
+    if self._pause_show_settings and self._pause_settings_tab == "art" then
+        if self:is_role(button, "cancel") then
+            return self:close_card_art_panel()
+        end
+        local targets = self:build_pause_focus_targets()
+        local focused = targets[tonumber(self._pause_focus_index) or 1]
+        if focused and focused.kind == "art_carousel" then
+            if button == "left" or button == "dpleft" then return self:art_cycle(-1) end
+            if button == "right" or button == "dpright" then return self:art_cycle(1) end
+        end
+    end
     if button == "up" or button == "dpup" then
         self:pause_gamepad_move(-1)
         return true
@@ -3241,6 +3278,7 @@ end
 function Game:exit_pause_menu()
     if self.STATE ~= self.STATES.PAUSED then return false end
     self:end_pause_slider_drag()
+    self:art_destroy_preview()
     local resume = self._pause_prev_state or self.STATES.SELECTING_HAND
     self._pause_continue_rect = nil
     self._pause_new_run_rect = nil
@@ -3610,7 +3648,9 @@ function Game:default_settings()
         -- it is an information overlay the base game does not have, and it costs the 20 px
         -- under the row.
         JOKER_DISPLAY = false,
-        HIGH_CONTRAST_CARDS = false,
+        -- Per suit: which collab draws the face cards (absent = the deck's own) and whether
+        -- the suit uses the high-contrast sheets (`card_art.lua`).
+        CARD_ART = CardArt.default_settings(),
         TUTORIAL_COMPLETE = false,
         TUTORIAL_STAGE = 1,
         GRAPHICS = { texture_scaling = 1 },
@@ -3668,9 +3708,8 @@ function Game:normalize_settings(data)
     if type(data.JOKER_DISPLAY) == "boolean" then
         out.JOKER_DISPLAY = data.JOKER_DISPLAY
     end
-    if type(data.HIGH_CONTRAST_CARDS) == "boolean" then
-        out.HIGH_CONTRAST_CARDS = data.HIGH_CONTRAST_CARDS
-    end
+    -- A save from before per-suit art has only the old global contrast switch.
+    out.CARD_ART = CardArt.normalize(data.CARD_ART, data.HIGH_CONTRAST_CARDS)
     if type(data.TUTORIAL_COMPLETE) == "boolean" then
         out.TUTORIAL_COMPLETE = data.TUTORIAL_COMPLETE
     elseif math.max(0, math.floor(tonumber(data.WINS) or 0)) > 0
@@ -3710,7 +3749,7 @@ function Game:snapshot_settings()
         REDUCED_MOTION = self:reduced_motion_enabled(),
         TILT = self:tilt_enabled(),
         JOKER_DISPLAY = self:joker_display_enabled(),
-        HIGH_CONTRAST_CARDS = self:high_contrast_cards_enabled(),
+        CARD_ART = CardArt.normalize(self.SETTINGS and self.SETTINGS.CARD_ART),
         TUTORIAL_COMPLETE = self.SETTINGS and self.SETTINGS.TUTORIAL_COMPLETE == true,
         TUTORIAL_STAGE = self.SETTINGS and self.SETTINGS.TUTORIAL_STAGE or 1,
         CONTROLS = InputBindings.normalize_controls(self.SETTINGS and self.SETTINGS.CONTROLS),
@@ -3981,28 +4020,297 @@ function Game:set_joker_display_enabled(enabled)
     self:save_settings()
 end
 
-function Game:high_contrast_cards_enabled()
-    return (self.SETTINGS and self.SETTINGS.HIGH_CONTRAST_CARDS) == true
+--- The validated per-suit art table (`card_art.lua`). Validated whenever the table itself is
+--- replaced -- a load, a test building settings by hand -- so the renderer never sees a bad
+--- entry, and returned as-is otherwise: every card's `refresh_quads` comes through here.
+---@return table
+function Game:card_art_settings()
+    if not self.SETTINGS then return CardArt.default_settings() end
+    local art = self.SETTINGS.CARD_ART
+    if art == nil or art ~= self._card_art_validated then
+        art = CardArt.normalize(art)
+        self.SETTINGS.CARD_ART = art
+        self._card_art_validated = art
+    end
+    return art
 end
 
-function Game:get_playing_card_atlas_name()
-    return self:high_contrast_cards_enabled() and "cards_2" or "cards_1"
+--- One suit's art: `{ collab = id|nil, contrast = boolean }`.
+---@return table
+function Game:get_card_art(suit)
+    local key = CardArt.suit_key(suit) or "Hearts"
+    local entry = self:card_art_settings()[key]
+    return { collab = entry.collab, contrast = entry.contrast == true }
 end
 
-function Game:set_high_contrast_cards(enabled)
-    if not self.SETTINGS then return end
-    self.SETTINGS.HIGH_CONTRAST_CARDS = enabled == true
-    local atlas_name = self:get_playing_card_atlas_name()
-    self:ensure_asset_atlas_loaded(atlas_name)
+--- Where a playing card's rank-and-suit layer is drawn from.
+---@return string atlas_name
+---@return number index
+function Game:playing_card_face_sprite(rank, suit, default_index)
+    return CardArt.face_sprite(self:card_art_settings(), rank, suit, default_index)
+end
+
+--- The deck sheet a suit's number cards use. With no suit, the sheet most of the deck is on.
+---@return string
+function Game:get_playing_card_atlas_name(suit)
+    local art = self:card_art_settings()
+    local key = CardArt.suit_key(suit)
+    if key then return art[key].contrast and "cards_2" or "cards_1" end
+    local contrast = 0
+    for _, s in ipairs(CardArt.SUITS) do
+        if art[s].contrast then contrast = contrast + 1 end
+    end
+    return contrast * 2 > #CardArt.SUITS and "cards_2" or "cards_1"
+end
+
+--- Every sheet the current art draws playing cards from, for warming ahead of a deal.
+---@return string[]
+function Game:get_playing_card_atlas_names()
+    local art, seen, out = self:card_art_settings(), {}, {}
+    local function add(name)
+        if not seen[name] then seen[name] = true; out[#out + 1] = name end
+    end
+    for _, suit in ipairs(CardArt.SUITS) do
+        local entry = art[suit]
+        add(entry.contrast and "cards_2" or "cards_1")
+        if entry.collab then add(CardArt.atlas_name(suit, entry.collab, entry.contrast)) end
+    end
+    return out
+end
+
+--- Set one suit's art and redraw every live card of that suit in place.
+---@param suit string
+---@param collab string|nil a collab id from `CardArt.COLLABS`, or nil for the deck's own art
+---@param contrast boolean
+---@return boolean changed
+function Game:set_card_art(suit, collab, contrast)
+    local key = CardArt.suit_key(suit)
+    if not key or not self.SETTINGS then return false end
+    if collab ~= nil and not CardArt.find(key, collab) then return false end
+    local art = self:card_art_settings()
+    local before = art[key]
+    if before.collab == collab and before.contrast == (contrast == true) then return false end
+    local previous = before.collab and CardArt.atlas_name(key, before.collab, before.contrast)
+    art[key] = { collab = collab, contrast = contrast == true }
+
     -- Cards registered with an explicit atlas are previews or special-purpose nodes and
-    -- must retain that choice. All ordinary live cards switch in place.
+    -- keep that choice; `Card:refresh_quads` re-resolves everything else from the settings.
     for _, card in ipairs((G and G.I and G.I.CARD) or {}) do
-        if card and not card._rank_atlas_explicit then
-            card.rank_atlas_name = atlas_name
-            if card.refresh_quads then card:refresh_quads() end
+        if card and not card._rank_atlas_explicit and card.refresh_quads then
+            local data = card.card_data or {}
+            local card_suit = data.suit or (card.params and card.params.suit)
+            if CardArt.suit_key(card_suit) == key then card:refresh_quads() end
         end
     end
+    -- The sheet this suit just stopped using is not drawn by anything else.
+    if previous and previous ~= CardArt.atlas_name(key, collab or "", contrast) then
+        self:unload_asset_atlas(previous)
+    end
     self:save_settings()
+    return true
+end
+
+--- Card Art panel (Settings > Art). The carousel and the contrast box are a pending choice
+--- for the suit being edited; nothing changes until Set, so browsing never redraws a run.
+
+--- The preview is three live playing cards, not three sprites, so it moves the way a hand does:
+--- the same idle sway as `Hand:apply_idle_sway` (`hand.lua`), the same spring, juice on a tap,
+--- and a real flip when the choice changes, with the art swapping edge-on as a card turned over.
+local ART_SWAY_R_AMP = 0.02
+local ART_SWAY_R_RATE = 2
+local ART_SWAY_Y_AMP = 0.03 * CardArt.CELL_H / (2.4 * 47 / 41) -- the hand's units, in px
+local ART_SWAY_Y_RATE = 0.666
+local ART_SWAY_PHASE_PER_PX = 20 / 320
+
+--- Where preview card `i` (0..2, J/Q/K) draws its rank layer from, for the pending choice.
+---@return string atlas_name
+---@return number index
+function Game:art_preview_sprite(i)
+    local suit, collab, contrast = self:art_pending()
+    if collab then return CardArt.atlas_name(suit, collab, contrast), i end
+    local suit_i = self._art_suit or 1
+    return contrast and "cards_2" or "cards_1", (11 + i - 2) + (suit_i - 1) * 13
+end
+
+--- Point the preview cards at the pending choice. They carry an explicit atlas, so
+--- `set_card_art` and the settings never touch them.
+function Game:art_sync_preview_cards()
+    local suit = CardArt.SUITS[self._art_suit or 1]
+    for i, card in ipairs(self._art_cards or {}) do
+        local name, index = self:art_preview_sprite(i - 1)
+        card._rank_atlas_explicit = true
+        card.params.rank_atlas_name = name
+        card.rank_atlas_name = name
+        card.rank_index = index
+        card.card_data.suit = suit
+        card:refresh_quads()
+    end
+end
+
+function Game:art_ensure_preview_cards()
+    if self._art_cards then return self._art_cards end
+    self._art_cards = {}
+    for i = 0, 2 do
+        local name, index = self:art_preview_sprite(i)
+        local card = Card(0, 0, CardArt.CELL_W, CardArt.CELL_H,
+            { rank = 11 + i, suit = CardArt.SUITS[self._art_suit or 1] }, nil,
+            { face_up = true, rank_atlas_name = name, rank_index = index })
+        card.states.click.can = false
+        card.states.drag.can = false
+        card.states.hover.can = false
+        self._art_cards[#self._art_cards + 1] = card
+    end
+    return self._art_cards
+end
+
+--- Turn the cards over to the pending choice. The swap reads the pending state when the card
+--- is edge-on rather than capturing it now, so a run of quick presses lands on the last one.
+function Game:art_flip_preview()
+    if not self._art_cards then return end
+    for _, card in ipairs(self._art_cards) do
+        if card.start_flip then
+            card:start_flip(function() self:art_sync_preview_cards() end)
+        end
+    end
+    if not (self._art_cards[1] and self._art_cards[1].start_flip) then
+        self:art_sync_preview_cards()
+    end
+end
+
+--- Drop the preview cards, including from `G.I.CARD`, which nothing else prunes.
+function Game:art_destroy_preview()
+    local cards = self._art_cards
+    if not cards then return end
+    self._art_cards = nil
+    local registry = G and G.I and G.I.CARD
+    if not registry then return end
+    for i = #registry, 1, -1 do
+        for _, card in ipairs(cards) do
+            if registry[i] == card then table.remove(registry, i); break end
+        end
+    end
+end
+
+--- Rest positions for the preview, from the panel layout. The first layout snaps the cards
+--- into place; after that the spring owns them.
+function Game:art_layout_preview(x0, y, pitch)
+    for i, card in ipairs(self:art_ensure_preview_cards()) do
+        local x = x0 + (i - 1) * pitch
+        local fresh = card._art_base == nil
+        card._art_base = { x = x, y = y }
+        card.T.x = x
+        if fresh then
+            card.T.y, card.T.r = y, 0
+            card.VT.x, card.VT.y, card.VT.r = x, y, 0
+        end
+    end
+end
+
+--- Breathe the preview, exactly as the hand does, and run each card's spring and flip.
+function Game:update_card_art_preview(dt)
+    if not self._art_cards then return end
+    if not (self._pause_show_settings and self._pause_settings_tab == "art") then return end
+    local t = (self.TIMERS and self.TIMERS.REAL) or 0
+    for _, card in ipairs(self._art_cards) do
+        local base = card._art_base
+        if base then
+            local phase = base.x * ART_SWAY_PHASE_PER_PX
+            card.T.r = ART_SWAY_R_AMP * math.sin(ART_SWAY_R_RATE * t + phase)
+            card.T.y = base.y + ART_SWAY_Y_AMP * math.sin(ART_SWAY_Y_RATE * t + phase)
+        end
+        card:update(dt)
+    end
+end
+
+--- Point the panel at a suit and load its saved choice into the pending state.
+---@param index number 1..4 into `CardArt.SUITS`
+function Game:art_select_suit(index)
+    index = math.max(1, math.min(#CardArt.SUITS, math.floor(tonumber(index) or 1)))
+    local changed = index ~= self._art_suit
+    self._art_suit = index
+    local saved = self:get_card_art(CardArt.SUITS[index])
+    self._art_pick = 1
+    for i, entry in ipairs(CardArt.carousel(CardArt.SUITS[index])) do
+        if entry.id == saved.collab then self._art_pick = i end
+    end
+    self._art_contrast = saved.contrast
+    if changed then self:art_flip_preview() end
+end
+
+function Game:open_card_art_panel()
+    self:end_pause_slider_drag()
+    self._pause_settings_tab = "art"
+    self:art_destroy_preview()
+    self:art_select_suit(self._art_suit or 1)
+    self:art_ensure_preview_cards()
+    self._pause_focus_index = 1
+    return true
+end
+
+function Game:close_card_art_panel()
+    self:art_destroy_preview()
+    self._pause_settings_tab = "general"
+    self._pause_focus_index = 1
+    return true
+end
+
+--- Step the carousel, wrapping at both ends.
+function Game:art_cycle(delta)
+    local entries = CardArt.carousel(CardArt.SUITS[self._art_suit or 1])
+    local pick = (math.floor(tonumber(self._art_pick) or 1) - 1 + (delta or 1)) % #entries
+    self._art_pick = pick + 1
+    Sfx.play("paper1")
+    self:art_flip_preview()
+    return true
+end
+
+function Game:art_toggle_contrast()
+    self._art_contrast = not self._art_contrast
+    self:art_flip_preview()
+    return true
+end
+
+--- A tap on a preview card pops it, the way touching a card in hand does.
+---@return boolean hit
+function Game:art_touch_preview(x, y)
+    for _, card in ipairs(self._art_cards or {}) do
+        local b = card._art_base
+        if b and x >= b.x and x <= b.x + CardArt.CELL_W and y >= b.y and y <= b.y + CardArt.CELL_H then
+            if card.juice_up then card:juice_up() end
+            Sfx.play("paper1")
+            return true
+        end
+    end
+    return false
+end
+
+--- The pending choice, as `set_card_art` takes it.
+---@return string suit
+---@return string|nil collab
+---@return boolean contrast
+function Game:art_pending()
+    local suit = CardArt.SUITS[self._art_suit or 1]
+    local entries = CardArt.carousel(suit)
+    local entry = entries[math.max(1, math.min(#entries, self._art_pick or 1))]
+    return suit, entry.id, self._art_contrast == true
+end
+
+--- Whether the pending choice differs from what the suit uses now.
+function Game:art_pending_changed()
+    local suit, collab, contrast = self:art_pending()
+    local saved = self:get_card_art(suit)
+    return saved.collab ~= collab or saved.contrast ~= contrast
+end
+
+function Game:art_apply()
+    local suit, collab, contrast = self:art_pending()
+    if self:set_card_art(suit, collab, contrast) then
+        Sfx.play_button()
+        for _, card in ipairs(self._art_cards or {}) do
+            if card.juice_up then card:juice_up(0.3, 0.3) end
+        end
+    end
+    return true
 end
 
 --- Power the accelerometer to match the current settings. Idempotent; safe to call whenever
@@ -4288,6 +4596,7 @@ end
 function Game:close_settings_from_menu()
     if not self._settings_over_menu then return false end
     self:end_pause_slider_drag()
+    self:art_destroy_preview()
     self._settings_over_menu = nil
     self._pause_show_settings = false
     self._pause_settings_tab = "general"
@@ -8103,6 +8412,96 @@ function Game:draw_bottom_pause()
                 w = row_w, h = 22,
             }
             draw_btn(self._pause_back_rect, "Back", self.C.MULT, is_pause_focused("back"))
+        elseif self._pause_settings_tab == "art" then
+            -- ===== SETTINGS CARD ART TAB =====
+            love.graphics.printf("Card Art", panel_x, panel_y + 4, panel_w, "center")
+
+            local suit_i = self._art_suit or 1
+            local suit = CardArt.SUITS[suit_i]
+            local entries = CardArt.carousel(suit)
+            local pick = math.max(1, math.min(#entries, self._art_pick or 1))
+            local entry = entries[pick]
+            local contrast = self._art_contrast == true
+            local changed = self:art_pending_changed()
+
+            -- Every rect is laid out before anything draws: `is_pause_focused` rebuilds the
+            -- focus list from these, and a half-built list puts the highlight on the wrong row.
+            local suit_gap = 6
+            local suit_w = math.floor((panel_w - 16 - suit_gap * 3) / 4)
+            local suit_x0 = panel_x + math.floor((panel_w - (suit_w * 4 + suit_gap * 3)) * 0.5 + 0.5)
+            self._art_suit_rects = {}
+            for i = 1, #CardArt.SUITS do
+                self._art_suit_rects[i] = {
+                    x = suit_x0 + (i - 1) * (suit_w + suit_gap), y = panel_y + 26, w = suit_w, h = 20,
+                }
+            end
+
+            -- Carousel: the J, Q and K the pending choice would draw, between two arrows.
+            local cw, ch, card_gap, arrow_w, arrow_gap = CardArt.CELL_W, CardArt.CELL_H, 4, 22, 8
+            local cards_w = cw * 3 + card_gap * 2
+            local strip_x = panel_x + math.floor((panel_w - (cards_w + (arrow_w + arrow_gap) * 2)) * 0.5 + 0.5)
+            local cards_x = strip_x + arrow_w + arrow_gap
+            local cards_y = panel_y + 52
+            self._art_carousel_rect = { x = cards_x - 2, y = cards_y - 2, w = cards_w + 4, h = ch + 4 }
+            self._art_prev_rect = { x = strip_x, y = cards_y + math.floor((ch - 40) / 2), w = arrow_w, h = 40 }
+            self._art_next_rect = {
+                x = cards_x + cards_w + arrow_gap, y = self._art_prev_rect.y, w = arrow_w, h = 40,
+            }
+
+            self._art_contrast_rect = { x = panel_x + 16, y = panel_y + 180, w = 150, h = 20 }
+            self._art_set_rect = { x = panel_x + panel_w - 16 - 110, y = panel_y + 180, w = 110, h = 20 }
+            self._pause_back_rect = {
+                x = panel_x + math.floor((panel_w - 140) * 0.5 + 0.5), y = panel_y + 208, w = 140, h = 20,
+            }
+
+            for i, name in ipairs(CardArt.SUITS) do
+                local active = (i == suit_i)
+                local colour = active and ((self.C.SO_2 and self.C.SO_2[name]) or self.C.ORANGE) or self.C.PANEL
+                draw_btn(self._art_suit_rects[i], name, colour, is_pause_focused("art_suit", i))
+            end
+
+            draw_btn(self._art_prev_rect, "<", self.C.BOOSTER, false)
+            draw_btn(self._art_next_rect, ">", self.C.BOOSTER, false)
+
+            -- Live cards, laid out here and moved by `update_card_art_preview`.
+            self:art_layout_preview(cards_x, cards_y, cw + card_gap)
+            for _, card in ipairs(self._art_cards or {}) do
+                card:draw()
+            end
+            if is_pause_focused("art_carousel") then
+                local r = self._art_carousel_rect
+                love.graphics.setColor(1, 1, 1, 1)
+                love.graphics.setLineWidth(2)
+                love.graphics.rectangle("line", r.x + 0.5, r.y + 0.5, r.w - 1, r.h - 1)
+            end
+
+            love.graphics.setFont(self.FONTS.PIXEL.SMALL)
+            love.graphics.setColor(self.C.WHITE)
+            love.graphics.printf(entry.name, panel_x, panel_y + 152, panel_w, "center")
+            love.graphics.setColor(changed and self.C.GREY or self.C.GREEN)
+            love.graphics.printf(("%d / %d  -  %s"):format(pick, #entries,
+                changed and "Press Set to use" or "In use"), panel_x, panel_y + 164, panel_w, "center")
+
+            -- High contrast is a checkbox: the box carries the state, the label stays put.
+            local cr = self._art_contrast_rect
+            draw_btn(cr, "", self.C.PANEL, is_pause_focused("art_contrast"))
+            local box = 10
+            local bx, by = cr.x + 6, cr.y + math.floor((cr.h - box) / 2)
+            love.graphics.setColor(self.C.WHITE)
+            love.graphics.setLineWidth(1)
+            love.graphics.rectangle("line", bx + 0.5, by + 0.5, box - 1, box - 1)
+            if contrast then
+                love.graphics.setColor(self.C.GREEN)
+                love.graphics.rectangle("fill", bx + 2, by + 2, box - 4, box - 4)
+            end
+            love.graphics.setColor(self.C.WHITE)
+            love.graphics.setFont(self.FONTS.PIXEL.SMALL)
+            love.graphics.printf("High Contrast", bx + box + 4, cr.y + math.floor(
+                (cr.h - love.graphics.getFont():getHeight()) * 0.5 + 0.5) - 1, cr.w - box - 14, "left")
+
+            draw_btn(self._art_set_rect, "Set", changed and self.C.GREEN or self.C.GREY,
+                is_pause_focused("art_set"))
+            draw_btn(self._pause_back_rect, "Back", self.C.MULT, is_pause_focused("back"))
         else
             -- ===== SETTINGS GAME TAB =====
             love.graphics.printf("Settings", panel_x, panel_y + 10, panel_w, "center")
@@ -8166,9 +8565,6 @@ function Game:draw_bottom_pause()
                 toggle_row[#toggle_row + 1] = { key = "tilt", label = "Tilt", on = self:tilt_enabled() }
             end
             toggle_row[#toggle_row + 1] = { key = "joker_display", label = "Joker Info", on = jd_on }
-            toggle_row[#toggle_row + 1] = {
-                key = "high_contrast", label = "Contrast", on = self:high_contrast_cards_enabled(),
-            }
 
             local toggle_h = 20
             local toggle_margin = 2
@@ -8180,7 +8576,6 @@ function Game:draw_bottom_pause()
             self._pause_reduced_motion_rect = nil
             self._pause_tilt_rect = nil
             self._pause_joker_display_rect = nil
-            self._pause_high_contrast_rect = nil
             self._pause_skip_tutorial_rect = nil
             for i, t in ipairs(toggle_row) do
                 local r = {
@@ -8199,10 +8594,8 @@ function Game:draw_bottom_pause()
                     self._pause_reduced_motion_rect = r
                 elseif t.key == "tilt" then
                     self._pause_tilt_rect = r
-                elseif t.key == "joker_display" then
-                    self._pause_joker_display_rect = r
                 else
-                    self._pause_high_contrast_rect = r
+                    self._pause_joker_display_rect = r
                 end
             end
 
@@ -8219,6 +8612,7 @@ function Game:draw_bottom_pause()
             local open_defs = {
                 { key = "audio_open", label = "Audio", field = "_pause_audio_open_rect", color = self.C.BLUE },
                 { key = "controls_open", label = "Controls", field = "_pause_controls_open_rect", color = self.C.BOOSTER },
+                { key = "art_open", label = "Art", field = "_pause_art_open_rect", color = self.C.PURPLE },
             }
             if not BuildFlags.release then
                 open_defs[#open_defs + 1] = {
@@ -8233,13 +8627,16 @@ function Game:draw_bottom_pause()
             local open_x0 = panel_x + math.floor((panel_w - open_span) * 0.5 + 0.5)
             self._pause_audio_open_rect = nil
             self._pause_controls_open_rect = nil
+            self._pause_art_open_rect = nil
             self._pause_performance_open_rect = nil
             for i, def in ipairs(open_defs) do
                 local r = {
                     x = open_x0 + (i - 1) * (open_w + row_gap),
                     y = panel_y + 190,
                     w = open_w,
-                    h = row_h,
+                    -- Four across leaves ~69 px a button, too narrow for "Performance" in the
+                    -- MEDIUM face; `draw_btn` takes SMALL at 20 px and under.
+                    h = (open_count > 3) and 20 or row_h,
                 }
                 self[def.field] = r
                 draw_btn(r, def.label, def.color, is_pause_focused(def.key))
@@ -8385,6 +8782,10 @@ function Game:clear_run_assets_for_main_menu()
         "cards_1", "cards_2", "Booster", "Voucher", "stickers",
         "centers", "tags", "edition_foil", "edition_holo",
     }
+    -- Collab sheets are run atlases too; at most one per suit is ever resident.
+    for _, entry in ipairs(CardArt.atlas_entries()) do
+        run_atlases[#run_atlases + 1] = entry.name
+    end
     for _, name in ipairs(run_atlases) do
         if self.unload_asset_atlas then
             self:unload_asset_atlas(name)
@@ -8521,7 +8922,7 @@ function Game:run_start_steps()
     return {
         function() self:_run_start_leave_menu() end,
         function() self:warm_atlases({ "centers" }) end,
-        function() self:warm_atlases({ self:get_playing_card_atlas_name() }) end,
+        function() self:warm_atlases(self:get_playing_card_atlas_names()) end,
         function() self:_run_start_reset_objects() end,
         function()
             self:initialize_run_loop()
@@ -9054,6 +9455,7 @@ function Game:update(dt, real_dt)
     -- D-pad ramp and deferred settings write would otherwise never tick. It is also reachable
     -- over the main menu, where `update` runs normally.
     self:update_pause_slider_hold(real_dt)
+    self:update_card_art_preview(real_dt)
     if self.STATE == self.STATES.PAUSED then
         return
     end
@@ -15548,6 +15950,36 @@ function Game:handle_pause_settings_touch(x, y)
             end
             return
         end
+        if self._pause_settings_tab == "art" then
+            for i, r in ipairs(self._art_suit_rects or {}) do
+                if self:_point_in_rect_simple(x, y, r) then
+                    self:art_select_suit(i)
+                    return
+                end
+            end
+            if self._art_prev_rect and self:_point_in_rect_simple(x, y, self._art_prev_rect) then
+                self:art_cycle(-1)
+                return
+            end
+            if self._art_next_rect and self:_point_in_rect_simple(x, y, self._art_next_rect) then
+                self:art_cycle(1)
+                return
+            end
+            if self._art_contrast_rect and self:_point_in_rect_simple(x, y, self._art_contrast_rect) then
+                self:art_toggle_contrast()
+                return
+            end
+            if self:art_touch_preview(x, y) then return end
+            if self._art_set_rect and self:_point_in_rect_simple(x, y, self._art_set_rect) then
+                self:art_apply()
+                return
+            end
+            if self._pause_back_rect and self:_point_in_rect_simple(x, y, self._pause_back_rect) then
+                self:close_card_art_panel()
+                return
+            end
+            return
+        end
         if self._pause_settings_tab == "audio" then
             if self:begin_pause_slider_drag(x, y) then return end
             if self._pause_back_rect and self:_point_in_rect_simple(x, y, self._pause_back_rect) then
@@ -15586,10 +16018,8 @@ function Game:handle_pause_settings_touch(x, y)
             self:set_joker_display_enabled(not self:joker_display_enabled())
             return
         end
-        if self._pause_high_contrast_rect
-            and self:_point_in_rect_simple(x, y, self._pause_high_contrast_rect) then
-            self:end_pause_slider_drag()
-            self:set_high_contrast_cards(not self:high_contrast_cards_enabled())
+        if self._pause_art_open_rect and self:_point_in_rect_simple(x, y, self._pause_art_open_rect) then
+            self:open_card_art_panel()
             return
         end
         if self._pause_skip_tutorial_rect
@@ -18218,6 +18648,12 @@ function Game:set_render_settings()
             -- budget, held for the whole process, to serve 36x36 cells at blind select.
             -- Every consumer goes through `ensure_animation_atlas_loaded` instead.
             self.ANIMATION_ATLAS[name].image = nil
+        end
+
+        -- Collab face-card sheets, two per collab (normal and high contrast). Registered
+        -- like the rest and just as lazy: only the sheets a suit is set to are ever loaded.
+        for _, entry in ipairs(CardArt.atlas_entries()) do
+            self.asset_atli[#self.asset_atli + 1] = entry
         end
 
         -- Register all asset atlases, lazy-load textures on first use.

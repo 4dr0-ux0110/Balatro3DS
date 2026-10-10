@@ -168,7 +168,8 @@ function Card:init(X, Y, W, H, card, center, params)
 
     self._rank_atlas_explicit = self.params.rank_atlas_name ~= nil
     self.rank_atlas_name = self.params.rank_atlas_name
-        or (G and G.get_playing_card_atlas_name and G:get_playing_card_atlas_name())
+        or (G and G.get_playing_card_atlas_name
+            and G:get_playing_card_atlas_name(self.card_data.suit or self.params.suit))
         or "cards_1"
     -- Seals: separate atlas + per-seal indices (`SEAL_ATLAS_INDICES`), not rank/suit math.
     self.seal_atlas_name = self.params.seal_atlas_name or "centers"
@@ -322,12 +323,22 @@ function Card:refresh_quads()
     -- resolve atlases
     self.back_atlas = self:resolve_atlas(self.back_atlas_name)
     self.face_atlas = self:resolve_atlas(self.face_atlas_name)
+    -- The rank layer follows the per-suit card art (`card_art.lua`): the suit's contrast picks
+    -- the deck sheet, and a collab replaces J/Q/K with a cell of its own sheet. `rank_index`
+    -- keeps meaning the card's cell in the deck sheets; only the drawn cell moves.
+    local rank_draw_index = self.rank_index
+    if not self._rank_atlas_explicit and G and G.playing_card_face_sprite then
+        local data = self.card_data or {}
+        local rank = data.rank or (self.params and self.params.rank)
+        local suit = data.suit or (self.params and self.params.suit)
+        self.rank_atlas_name, rank_draw_index = G:playing_card_face_sprite(rank, suit, self.rank_index)
+    end
     self.rank_atlas = self:resolve_atlas(self.rank_atlas_name)
     self.seal_atlas = self:resolve_atlas(self.seal_atlas_name)
 
     self.back_quad, self.back_w, self.back_h = self:compute_quad(self.back_atlas, self.back_index)
     self.face_quad, self.face_w, self.face_h = self:compute_quad(self.face_atlas, self.face_index)
-    self.rank_quad, self.rank_w, self.rank_h = self:compute_quad(self.rank_atlas, self.rank_index)
+    self.rank_quad, self.rank_w, self.rank_h = self:compute_quad(self.rank_atlas, rank_draw_index)
     
     -- Stone cards don't display rank or suit.
     if self.enhancement == "stone" then
