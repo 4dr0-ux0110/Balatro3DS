@@ -34,7 +34,10 @@ Use these top-level namespaces:
 - `menu`, `settings`, `controls`, `common`: fixed interface text.
 - `hand`, `suit`, `rank`, `term`: shared gameplay terminology.
 - `joker`, `consumable`, `deck`, `stake`, `blind`, `voucher`, `tag`: catalog content.
-- `tutorial`, `collection`, `shop`, `round`, `game_over`, `win`: screen-specific text.
+- `tutorial`, `collection`, `shop`, `round`, `game_over`, `win`, `hud`, `blind`, `booster`,
+  `deck_view`, `run_info`, `profile`, `career`, `mods`, `pause`, `toast`, `challenge`,
+  `joker_display`: screen-specific text.
+- `smods`: the vanilla message keys mods pass to `localize` (`smods.k_upgrade_ex`).
 
 Keys identify meaning, not the English sentence. A wording change must not require a key change.
 
@@ -71,6 +74,31 @@ The runtime uses this lookup order:
 
 Parameters use named placeholders such as `{score}` and `{target}`. Placeholder names must match
 between every language.
+
+### Interface text
+
+Screens keep their English in the code and look the translation up beside it:
+
+```lua
+love.graphics.printf(I18N.text("pause.title", nil, "Paused"), x, y, w, "center")
+string.format(I18N.text("round.cash_out", nil, "Cash Out: $%d"), total)
+```
+
+`I18N.text(key, params, english)` returns `english` untouched while the language is English, so
+English never depends on `locales/en.lua` matching the code. `locales/en.lua` still lists every key
+with the code's English, as the reference translators work from.
+
+Strings drawn every frame use `string.format` directives (`%d`, `%s`) rather than placeholders, so
+no parameter table is built per frame. A translation must keep the same directives in the same
+order; the tests check this.
+
+Labels that come from a table (menu entries, settings toggles, profile rows) are looked up by the
+entry's key at draw time, `I18N.text("menu.entry." .. entry.kind, nil, entry.label)`, so the table
+itself stays English. Anything shaped into a cache (TopUI's labels, the shop's buttons) is keyed on
+the language as well, so a language change rebuilds it.
+
+How to Play is one table per language (`tutorial.pages`). A translation supplies the same number of
+pages as the English.
 
 ## Catalog Migration
 
@@ -160,9 +188,15 @@ The automated checks run with the rest of the test suite (`./tests/run.sh locali
 - an interface key in another language that English doesn't have;
 - placeholder sets that differ from English;
 - a catalog entry with no printable name in some language;
-- `dev/config.sh` and `fonts.lua` disagreeing on the language font heights.
+- `dev/config.sh` and `fonts.lua` disagreeing on the language font heights;
+- a translated format string whose `%d`/`%s` directives differ from English;
+- a How to Play translation with a different number of pages;
+- English left on a translated screen: the test draws the menus, settings, a run (blind select,
+  shop, a booster pack, the cash out, run info, deck view) and both end screens in Chinese, and
+  fails on any run of four Latin letters it prints, beyond a short list of button names.
 
-They also cover UTF-8 splitting, CJK line wrapping, the saved setting and the Settings button.
+They also cover UTF-8 splitting, CJK line wrapping, the saved setting and the main-menu language
+picker.
 
 ## Adding A Language
 

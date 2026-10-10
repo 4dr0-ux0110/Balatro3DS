@@ -1594,36 +1594,36 @@ function Game:get_drag_zones_for_context(ctx)
     if ctx.kind == "shop_offer" then
         local offer = self.shop_offers and self.shop_offers[ctx.slot_index]
         local can_buy = self:can_buy_shop_offer(ctx.slot_index)
-        zones.top = DragZonesUI.make_zone("BUY", can_buy, can_buy and C.MONEY or C.GREY, "buy", true)
+        zones.top = DragZonesUI.make_zone(I18N.text("action.buy", nil, "BUY"), can_buy, can_buy and C.MONEY or C.GREY, "buy", true)
         if offer and (offer.kind == "tarot" or offer.kind == "planet" or offer.kind == "spectral") then
             -- Instant-use does not need an inventory slot (planets, Hermit, Temperance, etc.).
             local can_afford = self:can_afford_price(self:get_shop_offer_price(offer))
             local can_buy_use = can_afford and self:shop_offer_consumable_use_enabled(offer)
-            zones.top_right = DragZonesUI.make_zone("BUY and USE", can_buy_use, can_buy_use and C.GREEN or C.GREY, "buy_use", true)
+            zones.top_right = DragZonesUI.make_zone(I18N.text("action.buy_use_long", nil, "BUY and USE"), can_buy_use, can_buy_use and C.GREEN or C.GREY, "buy_use", true)
         end
     elseif ctx.kind == "shop_booster" then
         local offer = self.shop_booster_offers and self.shop_booster_offers[ctx.slot_index]
         local can_buy = offer and self:can_afford_price(self:get_shop_booster_price(offer))
-        zones.top = DragZonesUI.make_zone("BUY", can_buy, can_buy and C.MONEY or C.GREY, "buy", true)
+        zones.top = DragZonesUI.make_zone(I18N.text("action.buy", nil, "BUY"), can_buy, can_buy and C.MONEY or C.GREY, "buy", true)
     elseif ctx.kind == "shop_voucher" then
         local offer = self.shop_voucher_offers and self.shop_voucher_offers[ctx.slot_index]
         local can_buy = offer and self:can_afford_price(self:get_shop_voucher_price(offer))
             and not self:_voucher_already_owned(offer.id)
-        zones.top = DragZonesUI.make_zone("BUY", can_buy, can_buy and C.MONEY or C.GREY, "buy", true)
+        zones.top = DragZonesUI.make_zone(I18N.text("action.buy", nil, "BUY"), can_buy, can_buy and C.MONEY or C.GREY, "buy", true)
     elseif ctx.kind == "owned_joker" then
         local joker = self.jokers and self.jokers[ctx.index]
         local eternal = joker and joker.eternal == true
         local sell_value = math.floor(tonumber(joker and joker.sell_cost) or 0)
         zones.bottom = DragZonesUI.make_zone(
-            string.format("Sell $%d", sell_value),
+            string.format(I18N.text("action.sell", nil, "Sell $%d"), sell_value),
             not eternal, eternal and C.GREY or C.MULT, "sell", true)
     elseif ctx.kind == "owned_consumable" then
         local can_use = self:consumable_use_enabled(ctx.index)
-        zones.top = DragZonesUI.make_zone("USE", can_use, can_use and C.GREEN or C.GREY, "use", true)
+        zones.top = DragZonesUI.make_zone(I18N.text("action.use", nil, "USE"), can_use, can_use and C.GREEN or C.GREY, "use", true)
         local c = self.consumables and self.consumables[ctx.index]
         local sell_value = math.floor(self:consumable_sell_value(c))
         zones.bottom = DragZonesUI.make_zone(
-            string.format("Sell $%d", sell_value),
+            string.format(I18N.text("action.sell", nil, "Sell $%d"), sell_value),
             true, C.MULT, "sell", true)
     elseif ctx.kind == "booster_choice" then
         -- Single full-width strip: USE for hand-targeting cards, PICK otherwise.
@@ -1635,7 +1635,7 @@ function Game:get_drag_zones_for_context(ctx)
         if needs_use then
             local can_use = ch and not ch.taken and (tonumber(sess.picks_remaining) or 0) > 0
                 and c and self:pack_consumable_can_apply(c)
-            zones.full = DragZonesUI.make_zone("USE", can_use, can_use and C.GREEN or C.GREY, "use", true)
+            zones.full = DragZonesUI.make_zone(I18N.text("action.use", nil, "USE"), can_use, can_use and C.GREEN or C.GREY, "use", true)
         else
             local can_pick = ch and not ch.taken and (tonumber(sess.picks_remaining) or 0) > 0
             if can_pick and ch.kind == "joker" then
@@ -1643,7 +1643,7 @@ function Game:get_drag_zones_for_context(ctx)
             elseif can_pick and (ch.kind == "planet" or ch.kind == "tarot" or ch.kind == "spectral") then
                 can_pick = c and self:pack_consumable_can_apply(c)
             end
-            zones.full = DragZonesUI.make_zone("PICK", can_pick, can_pick and C.GREEN or C.GREY, "pick", true)
+            zones.full = DragZonesUI.make_zone(I18N.text("action.pick", nil, "PICK"), can_pick, can_pick and C.GREEN or C.GREY, "pick", true)
         end
     end
 
@@ -2332,7 +2332,7 @@ function Game:discover_item(id)
     end
     self:check_voucher_unlocks()
     if not self._unlock_discovery then
-        Milestones.push(self, "discovery", "New discovery", self:discovery_display_name(id))
+        Milestones.push(self, "discovery", I18N.text("toast.discovery", nil, "New discovery"), self:discovery_display_name(id))
     end
     self:save_settings()
     return true
@@ -2386,7 +2386,7 @@ function Game:check_voucher_unlocks(data)
         for _, id in ipairs(earned) do
             self._newly_unlocked_vouchers[#self._newly_unlocked_vouchers + 1] = id
             local def = VOUCHER_DEFS and VOUCHER_DEFS[id]
-            Milestones.push(self, "voucher", "Voucher unlocked", I18N.content_name("voucher", id, (def and def.name) or id))
+            Milestones.push(self, "voucher", I18N.text("toast.voucher_unlocked", nil, "Voucher unlocked"), I18N.content_name("voucher", id, (def and def.name) or id))
         end
         if self.SETTINGS then self.SETTINGS.VOUCHER_UNLOCKS = self.voucher_unlocks end
         self:save_settings()
@@ -2519,7 +2519,10 @@ function Game:queue_run_record_milestones()
         if raised and labels[name] then names[#names + 1] = name end
     end
     table.sort(names)
-    for _, name in ipairs(names) do Milestones.push(self, "record", "New record", labels[name]) end
+    for _, name in ipairs(names) do
+        Milestones.push(self, "record", I18N.text("toast.new_record", nil, "New record"),
+            I18N.text("toast.record." .. name, nil, labels[name]))
+    end
 end
 
 ---@return integer how many consumables of `kind` have been discovered
@@ -2561,7 +2564,7 @@ function Game:check_unlock(event_type, data)
     for _, id in ipairs(earned) do
         self._newly_unlocked_jokers[#self._newly_unlocked_jokers + 1] = id
         local def = JOKER_DEFS and JOKER_DEFS[id]
-        Milestones.push(self, "joker", "Joker unlocked", I18N.content_name("joker", id, (def and def.name) or id))
+        Milestones.push(self, "joker", I18N.text("toast.joker_unlocked", nil, "Joker unlocked"), I18N.content_name("joker", id, (def and def.name) or id))
     end
     self:save_settings()
     return earned
@@ -2628,7 +2631,8 @@ function Game:record_challenge_victory(challenge_id)
     self:refresh_challenge_unlocks()
     if not was_complete then
         local def = CHALLENGE_DEFS_BY_ID and CHALLENGE_DEFS_BY_ID[challenge_id]
-        Milestones.push(self, "challenge", "Challenge complete", (def and def.name) or challenge_id)
+        Milestones.push(self, "challenge", I18N.text("toast.challenge_complete", nil, "Challenge complete"),
+            def and I18N.content_name("challenge", def.id, def.name) or challenge_id)
     end
     self:save_settings()
     return true
@@ -5425,13 +5429,13 @@ end
 
 function Game:enter_main_menu_deck_select()
     if self:is_hand_scoring_active() then
-        self._pause_save_error = "Cannot save while scoring."
+        self._pause_save_error = I18N.text("save.scoring_blocked", nil, "Cannot save while scoring.")
         return false
     end
     local snapshot = self:build_run_snapshot()
     local ok, err = self:write_run_snapshot(snapshot)
     if not ok then
-        self._pause_save_error = "Save failed: " .. tostring(err or "unknown")
+        self._pause_save_error = I18N.text("save.failed_prefix", nil, "Save failed: ") .. tostring(err or I18N.text("save.unknown_error", nil, "unknown"))
         return false
     end
     self._pause_prev_state = nil
@@ -5446,13 +5450,13 @@ end
 
 function Game:pause_save_and_quit()
     if self:is_hand_scoring_active() then
-        self._pause_save_error = "Cannot save while scoring."
+        self._pause_save_error = I18N.text("save.scoring_blocked", nil, "Cannot save while scoring.")
         return false
     end
     local snapshot = self:build_run_snapshot()
     local ok, err = self:write_run_snapshot(snapshot)
     if not ok then
-        self._pause_save_error = "Save failed: " .. tostring(err or "unknown")
+        self._pause_save_error = I18N.text("save.failed_prefix", nil, "Save failed: ") .. tostring(err or I18N.text("save.unknown_error", nil, "unknown"))
         return false
     end
     self._pause_prev_state = nil
@@ -6056,7 +6060,8 @@ local BOSS_ANNOUNCE_FADE = 0.5
 function Game:begin_boss_announce()
     self._boss_announce = {
         age = 0,
-        name = tostring(self.current_blind_name or "Boss Blind"),
+        name = tostring((self.get_blind_display_name and self:get_blind_display_name(3))
+            or self.current_blind_name or I18N.text("blind.boss", nil, "Boss Blind")),
         effect = (self.get_boss_effect_text and self:get_boss_effect_text()) or "",
     }
     if not self._boss_announce_text then
@@ -6218,7 +6223,8 @@ end
 
 function Game:_draw_shop_booster_tooltip(offer, rect)
     if type(offer) ~= "table" or type(rect) ~= "table" then return end
-    local title = tostring(offer.name or "Booster Pack")
+    local title = tostring(offer.pack and BoosterPackUI.pack_name(offer.pack, offer.size)
+        or offer.name or I18N.text("booster.title", nil, "Booster Pack"))
     local desc = BoosterPackUI.shop_tooltip_description(offer)
     local font = (self.FONTS and self.FONTS.PIXEL and self.FONTS.PIXEL.SMALL) or love.graphics.getFont()
     local resolved = TooltipDraw.resolved_lines_from_multiline(desc)
@@ -7361,7 +7367,7 @@ function Game:apply_consumable_effect(c)
             end
         else 
             local p = Popup()
-            p:spawn("Nope!", "Nope", 160, 120, 3)
+            p:spawn(I18N.text("popup.nope", nil, "Nope!"), "Nope", 160, 120, 3)
             G:addPopup(p)
             if Sfx and Sfx.play then
                 -- Reference `card.lua:1513-1515`.
@@ -7894,9 +7900,9 @@ function Game:draw_bottom_blind_select()
         love.graphics.setLineWidth(1)
 
 
-        local selectText = "Upcoming"
+        local selectText = I18N.text("blind.upcoming", nil, "Upcoming")
         if selectable then
-            selectText = "Select"
+            selectText = I18N.text("blind.select", nil, "Select")
         end
         local selectWidth = 60
         local selectHeight = 16
@@ -7952,7 +7958,7 @@ function Game:draw_bottom_blind_select()
 
         love.graphics.setColor(self.C.WHITE)
         ty = y + scorePosY + 3
-        love.graphics.printf("Score at Least", tx, ty, scoreWidth, "center")
+        love.graphics.printf(I18N.text("blind.score_at_least", nil, "Score at Least"), tx, ty, scoreWidth, "center")
         love.graphics.setColor(self.C.RED)
         local req = NumberFormat.format(math.floor(tonumber(target) or 0))
         local rx = x + math.floor(card_w / 2) - math.floor(scoreWidth / 2)
@@ -7961,12 +7967,13 @@ function Game:draw_bottom_blind_select()
         love.graphics.setFont(self.FONTS.PIXEL.SMALL)
 
         love.graphics.setColor(self.C.WHITE)
-        req = "Reward: "..string.rep("$", reward).."+"
+        local reward_label = I18N.text("blind.reward", nil, "Reward: ")
+        req = reward_label..string.rep("$", reward).."+"
         rx = x + math.floor(card_w / 2) - math.floor(love.graphics.getFont():getWidth(req) / 2)
 
-        love.graphics.print("Reward: ", rx, ty + 24)
+        love.graphics.print(reward_label, rx, ty + 24)
         love.graphics.setColor(self.C.MONEY)
-        love.graphics.print("$"..string.rep("$", reward).."+", rx + love.graphics.getFont():getWidth("Reward: "), ty + 24)
+        love.graphics.print("$"..string.rep("$", reward).."+", rx + love.graphics.getFont():getWidth(reward_label), ty + 24)
 
         -- Skip UI
         if def and def.id ~= "boss" then
@@ -8025,7 +8032,7 @@ function Game:draw_bottom_blind_select()
             -- No "(B)": cancel is rebindable (`InputBindings.ROLES`), so a baked-in button letter
             -- goes stale the moment it is remapped, and it was what pushed this label past its
             -- button. The gamepad hint belongs with the bindings, not printed on a touch target.
-            local buttonText = "Skip Blind"
+            local buttonText = I18N.text("blind.skip", nil, "Skip Blind")
             love.graphics.setFont(Fonts.fit(self, self.FONTS.PIXEL.SMALL, buttonText, buttonW - 4))
             local button_font = love.graphics.getFont()
             love.graphics.print(buttonText, buttonX + math.floor(buttonW/2) - math.floor(button_font:getWidth(buttonText)/2), buttonY + math.floor(buttonH/2) - math.floor(button_font:getHeight(buttonText)/2))
@@ -8066,7 +8073,7 @@ function Game:draw_bottom_blind_select()
         end
         self._boss_reroll_btn_rect = { x = bx, y = by, w = bw, h = bh }
         love.graphics.setColor(self.C.WHITE)
-        local reroll_label = "Reroll $10"
+        local reroll_label = I18N.text("blind.reroll", nil, "Reroll $10")
         love.graphics.setFont(Fonts.fit(self, self.FONTS.PIXEL.SMALL, reroll_label, bw - 6))
         local reroll_font = love.graphics.getFont()
         love.graphics.printf(reroll_label, bx, by + math.floor((bh - reroll_font:getHeight()) / 2), bw, "center")
@@ -8086,7 +8093,7 @@ function Game:draw_bottom_shop()
     if callout then
         local rise = math.floor(math.max(0, 1 - callout.t / callout.duration) * 8)
         TicketStrip.draw(self, { x = 34, y = 8 - rise, w = 252, h = 34, stub_w = 64,
-            stub = "REDEEMED", title = callout.name, detail = "Voucher added to this run",
+            stub = I18N.text("voucher.redeemed_stub", nil, "REDEEMED"), title = callout.name, detail = I18N.text("voucher.redeemed_detail", nil, "Voucher added to this run"),
             stub_color = self.C.GOLD or self.C.MONEY })
     end
 end
@@ -8114,7 +8121,7 @@ function Game:_draw_skip_tag_tooltip()
     local info = skip_id ~= nil and self:get_skip_tag_tooltip(skip_id, blind_index) or nil
     local rect = self._blind_skip_tag_tap_rects and self._blind_skip_tag_tap_rects[blind_index]
     if not info or not rect then return end
-    local title = tostring(info.name or "Tag")
+    local title = tostring(info.name or I18N.text("term.tag", nil, "Tag"))
     local desc = tostring(info.description or "")
     local font = (self.FONTS and self.FONTS.PIXEL and self.FONTS.PIXEL.SMALL) or love.graphics.getFont()
     local resolved = TooltipDraw.resolved_lines_from_multiline(desc)
@@ -8357,12 +8364,12 @@ function Game:draw_bottom_pause()
         love.graphics.setColor(self.C.WHITE)
         love.graphics.setFont(self.FONTS.PIXEL.MEDIUM)
         if self._pause_settings_tab == "controls" then
-            love.graphics.printf("Controls", panel_x, panel_y + 4, panel_w, "center")
+            love.graphics.printf(I18N.text("settings.controls", nil, "Controls"), panel_x, panel_y + 4, panel_w, "center")
             if self._controls_listen_role then
                 love.graphics.setColor(self.C.ORANGE)
                 love.graphics.setFont(self.FONTS.PIXEL.SMALL)
                 local listen_label = string.format(
-                    "Press button for %s (slot %d)",
+                    I18N.text("settings.listen", nil, "Press button for %s (slot %d)"),
                     InputBindings.role_label(self._controls_listen_role),
                     math.floor(tonumber(self._controls_listen_slot) or 1)
                 )
@@ -8370,7 +8377,7 @@ function Game:draw_bottom_pause()
             else
                 love.graphics.setColor(self.C.GREY)
                 love.graphics.setFont(self.FONTS.PIXEL.SMALL)
-                love.graphics.printf("D-pad: move  A: rebind  B: back", panel_x, panel_y + 24, panel_w, "center")
+                love.graphics.printf(I18N.text("settings.controls_nav", nil, "D-pad: move  A: rebind  B: back"), panel_x, panel_y + 24, panel_w, "center")
             end
 
             local bindings = self:control_bindings()
@@ -8455,8 +8462,8 @@ function Game:draw_bottom_pause()
                 w = footer_w,
                 h = footer_h,
             }
-            draw_btn(self._pause_controls_reset_rect, "Reset", self.C.RED, is_controls_footer_focused("reset"))
-            draw_btn(self._pause_back_rect, "Back", self.C.MULT, is_controls_footer_focused("back"))
+            draw_btn(self._pause_controls_reset_rect, I18N.text("common.reset", nil, "Reset"), self.C.RED, is_controls_footer_focused("reset"))
+            draw_btn(self._pause_back_rect, I18N.text("common.back", nil, "Back"), self.C.MULT, is_controls_footer_focused("back"))
         elseif self._pause_settings_tab == "performance" then
             love.graphics.printf("Performance Lab", panel_x, panel_y + 4, panel_w, "center")
             love.graphics.setColor(self.C.GREY)
@@ -8512,19 +8519,19 @@ function Game:draw_bottom_pause()
             self._pause_back_rect = { x = self._perf_disable_rect.x + footer_w + gap, y = footer_y, w = footer_w, h = 24 }
             draw_btn(self._perf_reset_rect, "Reset", self.C.BOOSTER, is_pause_focused("perf_reset"))
             draw_btn(self._perf_disable_rect, "All Off", self.C.RED, is_pause_focused("perf_disable"))
-            draw_btn(self._pause_back_rect, "Back", self.C.MULT, is_pause_focused("back"))
+            draw_btn(self._pause_back_rect, I18N.text("common.back", nil, "Back"), self.C.MULT, is_pause_focused("back"))
         elseif self._pause_settings_tab == "audio" then
             -- ===== SETTINGS AUDIO TAB =====
-            love.graphics.printf("Audio", panel_x, panel_y + 8, panel_w, "center")
+            love.graphics.printf(I18N.text("settings.audio", nil, "Audio"), panel_x, panel_y + 8, panel_w, "center")
             love.graphics.setColor(self.C.GREY)
             love.graphics.setFont(self.FONTS.PIXEL.SMALL)
-            love.graphics.printf("Drag, or hold left/right", panel_x, panel_y + 24, panel_w, "center")
+            love.graphics.printf(I18N.text("settings.audio_hint", nil, "Drag, or hold left/right"), panel_x, panel_y + 24, panel_w, "center")
 
             -- Reference `UI_definitions.lua:2305,2328-2330`: screenshake is a 0-100 slider
             -- alongside the volumes, not a hidden constant.
             layout_volume_sliders(panel_y + 38)
             for _, def in ipairs(PAUSE_SLIDERS) do
-                draw_volume_slider(def.kind, def.label, self[def.get](self),
+                draw_volume_slider(def.kind, I18N.text("settings.slider." .. def.kind, nil, def.label), self[def.get](self),
                     is_pause_focused(def.kind))
             end
 
@@ -8533,10 +8540,10 @@ function Game:draw_bottom_pause()
                 x = panel_x + math.floor((panel_w - row_w) * 0.5 + 0.5), y = panel_y + 208,
                 w = row_w, h = 22,
             }
-            draw_btn(self._pause_back_rect, "Back", self.C.MULT, is_pause_focused("back"))
+            draw_btn(self._pause_back_rect, I18N.text("common.back", nil, "Back"), self.C.MULT, is_pause_focused("back"))
         elseif self._pause_settings_tab == "art" then
             -- ===== SETTINGS CARD ART TAB =====
-            love.graphics.printf("Card Art", panel_x, panel_y + 4, panel_w, "center")
+            love.graphics.printf(I18N.text("settings.card_art", nil, "Card Art"), panel_x, panel_y + 4, panel_w, "center")
 
             local suit_i = self._art_suit or 1
             local suit = CardArt.SUITS[suit_i]
@@ -8579,7 +8586,7 @@ function Game:draw_bottom_pause()
             for i, name in ipairs(CardArt.SUITS) do
                 local active = (i == suit_i)
                 local colour = active and ((self.C.SO_2 and self.C.SO_2[name]) or self.C.ORANGE) or self.C.PANEL
-                draw_btn(self._art_suit_rects[i], name, colour, is_pause_focused("art_suit", i))
+                draw_btn(self._art_suit_rects[i], I18N.suit_name(name), colour, is_pause_focused("art_suit", i))
             end
 
             draw_btn(self._art_prev_rect, "<", self.C.BOOSTER, false)
@@ -8599,10 +8606,11 @@ function Game:draw_bottom_pause()
 
             love.graphics.setFont(self.FONTS.PIXEL.SMALL)
             love.graphics.setColor(self.C.WHITE)
-            love.graphics.printf(entry.name, panel_x, panel_y + 152, panel_w, "center")
+            love.graphics.printf(entry.id == nil and I18N.text("settings.art_default", nil, "Default") or entry.name,
+                panel_x, panel_y + 152, panel_w, "center")
             love.graphics.setColor(changed and self.C.GREY or self.C.GREEN)
             love.graphics.printf(("%d / %d  -  %s"):format(pick, #entries,
-                changed and "Press Set to use" or "In use"), panel_x, panel_y + 164, panel_w, "center")
+                changed and I18N.text("settings.art_press_set", nil, "Press Set to use") or I18N.text("settings.art_in_use", nil, "In use")), panel_x, panel_y + 164, panel_w, "center")
 
             -- High contrast is a checkbox: the box carries the state, the label stays put.
             local cr = self._art_contrast_rect
@@ -8618,19 +8626,19 @@ function Game:draw_bottom_pause()
             end
             love.graphics.setColor(self.C.WHITE)
             love.graphics.setFont(self.FONTS.PIXEL.SMALL)
-            love.graphics.printf("High Contrast", bx + box + 4, cr.y + math.floor(
+            love.graphics.printf(I18N.text("settings.high_contrast", nil, "High Contrast"), bx + box + 4, cr.y + math.floor(
                 (cr.h - love.graphics.getFont():getHeight()) * 0.5 + 0.5) - 1, cr.w - box - 14, "left")
 
-            draw_btn(self._art_set_rect, "Set", changed and self.C.GREEN or self.C.GREY,
+            draw_btn(self._art_set_rect, I18N.text("settings.art_set", nil, "Set"), changed and self.C.GREEN or self.C.GREY,
                 is_pause_focused("art_set"))
-            draw_btn(self._pause_back_rect, "Back", self.C.MULT, is_pause_focused("back"))
+            draw_btn(self._pause_back_rect, I18N.text("common.back", nil, "Back"), self.C.MULT, is_pause_focused("back"))
         else
             -- ===== SETTINGS GAME TAB =====
-            love.graphics.printf("Settings", panel_x, panel_y + 10, panel_w, "center")
+            love.graphics.printf(I18N.text("settings.title", nil, "Settings"), panel_x, panel_y + 10, panel_w, "center")
 
             love.graphics.setColor(self.C.GREY)
             love.graphics.setFont(self.FONTS.PIXEL.SMALL)
-            love.graphics.printf("Game Speed", panel_x, panel_y + 34, panel_w, "center")
+            love.graphics.printf(I18N.text("settings.game_speed", nil, "Game Speed"), panel_x, panel_y + 34, panel_w, "center")
 
             -- Reference `UI_definitions.lua:2302`: these are the shipping game's four options.
             local speeds = { 0.5, 1, 2, 4 }
@@ -8709,7 +8717,8 @@ function Game:draw_bottom_pause()
                 -- Reduced motion is the one toggle whose "on" is a reduction, so it keeps the
                 -- inverted colouring it has always had.
                 local good = (t.on_is_good == false) and not t.on or (t.on_is_good ~= false and t.on)
-                draw_btn(r, t.label .. " " .. (t.on and "ON" or "OFF"),
+                draw_btn(r, I18N.text("settings.toggle." .. t.key, nil, t.label) .. " "
+                    .. (t.on and I18N.text("settings.on", nil, "ON") or I18N.text("settings.off", nil, "OFF")),
                     good and self.C.GREEN or self.C.PANEL,
                     is_pause_focused(t.key))
                 if t.key == "reduced_motion" then
@@ -8725,7 +8734,7 @@ function Game:draw_bottom_pause()
                 self._pause_skip_tutorial_rect = {
                     x = panel_x + 82, y = panel_y + 116, w = panel_w - 164, h = 22,
                 }
-                draw_btn(self._pause_skip_tutorial_rect, "Skip Tutorial", self.C.RED,
+                draw_btn(self._pause_skip_tutorial_rect, I18N.text("settings.skip_tutorial", nil, "Skip Tutorial"), self.C.RED,
                     is_pause_focused("skip_tutorial"))
             end
 
@@ -8761,20 +8770,20 @@ function Game:draw_bottom_pause()
                     h = (open_count > 3) and 20 or row_h,
                 }
                 self[def.field] = r
-                draw_btn(r, def.label, def.color, is_pause_focused(def.key))
+                draw_btn(r, I18N.text("settings.open." .. def.key, nil, def.label), def.color, is_pause_focused(def.key))
             end
 
             self._pause_back_rect = {
                 x = panel_x + math.floor((panel_w - row_w) * 0.5 + 0.5), y = panel_y + 216,
                 w = row_w, h = 18,
             }
-            draw_btn(self._pause_back_rect, "Back", self.C.MULT, is_pause_focused("back"))
+            draw_btn(self._pause_back_rect, I18N.text("common.back", nil, "Back"), self.C.MULT, is_pause_focused("back"))
         end
     else
         -- ===== MAIN PAUSE PAGE =====
         love.graphics.setColor(self.C.WHITE)
         love.graphics.setFont(self.FONTS.PIXEL.MEDIUM)
-        love.graphics.printf("Paused", panel_x, panel_y + 10, panel_w, "center")
+        love.graphics.printf(I18N.text("pause.title", nil, "Paused"), panel_x, panel_y + 10, panel_w, "center")
 
         -- Five rows now: the reference offers the collection from its in-run options overlay
         -- (`UI_definitions.lua:2223`), so a Joker you are being offered can be looked up
@@ -8788,16 +8797,16 @@ function Game:draw_bottom_pause()
         self._pause_save_quit_rect  = { x = btn_x, y = panel_y + 156, w = btn_w, h = btn_h }
 
         local can_save = not self:is_hand_scoring_active()
-        draw_btn(self._pause_continue_rect,   "Continue",      self.C.GREEN, is_pause_focused("continue"))
-        draw_btn(self._pause_settings_rect,   "Settings",      self.C.BOOSTER, is_pause_focused("settings"))
-        draw_btn(self._pause_collection_rect, "Collection",    self.C.PURPLE, is_pause_focused("collection"))
-        draw_btn(self._pause_new_run_rect,    "New Run",        self.C.RED, is_pause_focused("new_run"))
-        draw_btn(self._pause_save_quit_rect,  "Save and Quit",  can_save and self.C.BLUE or self.C.GREY, is_pause_focused("save_quit"))
+        draw_btn(self._pause_continue_rect,   I18N.text("common.continue", nil, "Continue"),      self.C.GREEN, is_pause_focused("continue"))
+        draw_btn(self._pause_settings_rect,   I18N.text("settings.title", nil, "Settings"),      self.C.BOOSTER, is_pause_focused("settings"))
+        draw_btn(self._pause_collection_rect, I18N.text("collection.title", nil, "Collection"),    self.C.PURPLE, is_pause_focused("collection"))
+        draw_btn(self._pause_new_run_rect,    I18N.text("menu.new_run", nil, "New Run"),        self.C.RED, is_pause_focused("new_run"))
+        draw_btn(self._pause_save_quit_rect,  I18N.text("pause.save_quit", nil, "Save and Quit"),  can_save and self.C.BLUE or self.C.GREY, is_pause_focused("save_quit"))
 
         if not can_save then
             love.graphics.setColor(self.C.GREY)
             love.graphics.setFont(self.FONTS.PIXEL.SMALL)
-            love.graphics.printf("Finish scoring before saving.", panel_x, panel_y + 182, panel_w, "center")
+            love.graphics.printf(I18N.text("pause.finish_scoring", nil, "Finish scoring before saving."), panel_x, panel_y + 182, panel_w, "center")
         elseif self._pause_save_error then
             love.graphics.setColor(self.C.RED)
             love.graphics.setFont(self.FONTS.PIXEL.SMALL)
@@ -14214,7 +14223,7 @@ function Game:_finish_round_win_eval(ctx, hands_left)
     if tonumber(self.current_blind_index) == 3 then
         for _, tag in ipairs(self.tags or {}) do
             if tag and tag.type == "investment" then
-                ctx.add_round_win_payout("Investment Tag", 25)
+                ctx.add_round_win_payout(I18N.content_name("tag", "tag_investment", "Investment Tag"), 25)
             end
         end
         for i = #self.tags, 1, -1 do
@@ -14256,21 +14265,21 @@ function Game:_finish_round_win_eval(ctx, hands_left)
     -- Reveal order for the Cash Out panel. The blind row is its header; zero-value rows are
     -- dropped so the list only ever shows money that was actually paid.
     self._round_win_display_lines = {
-        { "Blind reward", blind_pay, "pending", slot = "blind" },
+        { I18N.text("round.reward.blind", nil, "Blind reward"), blind_pay, "pending", slot = "blind" },
     }
     local function add_display_line(row)
         if (math.floor(tonumber(row[2]) or 0)) <= 0 then return end
         self._round_win_display_lines[#self._round_win_display_lines + 1] = row
     end
     local money_per_hand = math.max(1, hand_bonus)
-    add_display_line({ string.format("Remaining Hands ($%d each)", money_per_hand), hands_left * money_per_hand, "pending",
+    add_display_line({ string.format(I18N.text("round.reward.hands", nil, "Remaining Hands ($%d each)"), money_per_hand), hands_left * money_per_hand, "pending",
         badge = tostring(hands_left), badge_color = self.C.BLUE })
-    add_display_line({ string.format("Remaining Discards ($%d each)", discard_bonus), discard_bonus * self.discards, "pending",
+    add_display_line({ string.format(I18N.text("round.reward.discards", nil, "Remaining Discards ($%d each)"), discard_bonus), discard_bonus * self.discards, "pending",
         badge = tostring(self.discards), badge_color = self.C.RED })
     for _, row in ipairs(self._round_win_joker_payout_lines) do
         add_display_line(row)
     end
-    add_display_line({ string.format("1 interest per $5 (%d max)", cap_dollars), interest, "pending",
+    add_display_line({ string.format(I18N.text("round.reward.interest", nil, "1 interest per $5 (%d max)"), cap_dollars), interest, "pending",
         badge = tostring(interest), badge_color = self.C.ORANGE })
     self._round_win_joker_payout_lines = nil
 

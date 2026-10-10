@@ -117,7 +117,7 @@ local function add_round_win_money(ctx, joker, n)
     n = math.floor(tonumber(n) or 0)
     if n <= 0 then return end
     if type(ctx) == "table" and type(ctx.add_round_win_payout) == "function" then
-        local label = (joker and joker.def and joker.def.name) or "Joker"
+        local label = (joker and joker.def and I18N.content_name("joker", joker.def.id, joker.def.name)) or "Joker"
         ctx.add_round_win_payout(label, n)
     else
         add_money(ctx, n)

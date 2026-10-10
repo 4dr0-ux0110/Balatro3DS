@@ -24,7 +24,14 @@ function Popup:init()
 end
 
 --- @param delay number|nil seconds to wait before appearing, for effects that share a card
+--- The worded popups, translated as they are raised; the English stays the callers'.
+local WORD_KEYS = {
+    ["Nope!"] = "popup.nope", ["Eaten!"] = "popup.eaten", ["Drank!"] = "popup.drank",
+    ["Extinct!"] = "popup.extinct",
+}
+
 function Popup:spawn(amount, type, x, y, scale, delay)
+    if WORD_KEYS[amount] then amount = I18N.text(WORD_KEYS[amount], nil, amount) end
     self.text = amount
     self.pos.x = x
     self.pos.y = y + ANCHOR_Y_OFF

@@ -1273,12 +1273,38 @@ function JokerDisplay.refresh(game, force)
             if ok then apply_line(joker, "_jd_main", "_jd_main_kind", value, kind) end
             if joker._jd_main and def.note then
                 local ok2, note, note_kind = pcall(def.note, joker, ctx)
-                if ok2 then apply_line(joker, "_jd_note", "_jd_note_kind", note, note_kind or "plain") end
+                if ok2 then apply_line(joker, "_jd_note", "_jd_note_kind", JokerDisplay.localize_note(note), note_kind or "plain") end
             end
         end
     end
     return true
 end
+
+--- A reminder in the live language. The notes are built in English (they read the same words
+--- the mod does), so the translation happens here, once, on the finished string.
+local NOTE_KEYS = {
+    ["Round"] = "round", ["Faces"] = "faces", ["Gold"] = "gold", ["Kings"] = "kings",
+    ["Queens"] = "queens", ["All Suits"] = "all_suits", ["Club+other"] = "club_other",
+    ["A+Straight"] = "ace_straight", ["1st card"] = "first_card", ["N/A"] = "not_available",
+    ["copy"] = "copy",
+}
+local function localize_note(note)
+    if type(note) ~= "string" or I18N.get_language() == I18N.DEFAULT_LANGUAGE then return note end
+    if NOTE_KEYS[note] then return I18N.t("joker_display.note." .. NOTE_KEYS[note], nil, note) end
+    local n = note:match("^1 in (%d+)$")
+    if n then return I18N.t("joker_display.odds", { n = n }, note) end
+    n = note:match("^(%d+) Uncommon$")
+    if n then return I18N.t("joker_display.uncommon", { n = n }, note) end
+    n = note:match("^(%-?%d+) left$")
+    if n then return I18N.t("joker_display.left", { n = n }, note) end
+    local rank, suit = note:match("^(.-) of (%a+)$")
+    if rank then return I18N.t("card.rank_of_suit", { rank = rank, suit = I18N.suit_name(suit) }, note) end
+    local key = note:lower():gsub("[^%w]+", "_")
+    if I18N.has("hand." .. key) then return I18N.hand_name(note) end
+    if I18N.has("suit." .. key) then return I18N.suit_name(note) end
+    return note
+end
+JokerDisplay.localize_note = localize_note
 
 -- ---------------------------------------------------------------------------------------------
 -- Drawing
@@ -1293,7 +1319,11 @@ local function fit_one(font, text, w)
     if font:getWidth(text) <= w then return text end
     local out = text
     while #out > 1 and font:getWidth(out) > w do
-        out = out:sub(1, #out - 1)
+        -- One character, not one byte: a translated note is UTF-8, and half a character
+        -- draws as a box.
+        local last = out:find("[^\128-\191][\128-\191]*$") or #out
+        if last <= 1 then break end
+        out = out:sub(1, last - 1)
     end
     return out
 end

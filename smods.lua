@@ -967,15 +967,22 @@ local LOCALIZE = {
     a_chips = "+#1#", a_mult = "+#1# Mult", a_xmult = "X#1# Mult", a_dollars = "$#1#",
 }
 
+--- A vanilla key in the live language: `smods.<key>` when the game has it, else the English.
+local function localized(key)
+    local english = LOCALIZE[key]
+    if english == nil then return nil end
+    return I18N and I18N.text("smods." .. key, nil, english) or english
+end
+
 function SMODS.localize(args, _)
     if type(args) == "table" then
-        local text = LOCALIZE[args.key] or tostring(args.key)
+        local text = localized(args.key) or tostring(args.key)
         return (text:gsub("#(%d+)#", function(n)
             local v = args.vars and args.vars[tonumber(n)]
             return v ~= nil and tostring(v) or ""
         end))
     end
-    return LOCALIZE[args] or tostring(args)
+    return localized(args) or tostring(args)
 end
 
 --- The globals a mod's main file sees beyond the game's own: Steamodded's free functions.

@@ -331,4 +331,211 @@ suite.test("the main menu's globe opens a language picker", function()
     game:save_settings()
 end)
 
+--------------------------------------------------------------------------------
+-- Screens
+--------------------------------------------------------------------------------
+
+suite.test("interface strings keep the format directives the code fills", function()
+    -- `string.format` fills these positionally, so a translation has to keep each one, in order.
+    local en, zh = dofile(ROOT .. "locales/en.lua"), dofile(ROOT .. "locales/zh_CN.lua")
+    local function directives(s)
+        local out = {}
+        for d in s:gsub("%%%%", ""):gmatch("%%[%d%.%-]*[dsf]") do out[#out + 1] = d:sub(-1) end
+        return table.concat(out)
+    end
+    for key, value in pairs(en) do
+        if type(value) == "string" and type(zh[key]) == "string" then
+            T.assert_eq(directives(zh[key]), directives(value), key)
+        end
+    end
+end)
+
+suite.test("How to Play has the same pages in every language", function()
+    local MainMenuUI = require("main_menu_ui")
+    local english = MainMenuUI.HOW_TO_PLAY_PAGES
+    I18N.set_language("zh_CN")
+    local pages = MainMenuUI.how_to_play_pages()
+    T.assert_true(pages ~= english, "a translated set")
+    T.assert_eq(#pages, #english)
+    for i, page in ipairs(pages) do
+        T.assert_true(type(page.title) == "string" and #page.lines == #english[i].lines, "page " .. i)
+    end
+    back_to_english()
+    T.assert_true(MainMenuUI.how_to_play_pages() == english, "English is the table itself")
+end)
+
+--- Draw `fn` with every string the screens print recorded.
+local function capture(fn)
+    local seen, errors = {}, {}
+    local g = love.graphics
+    local print0, printf0 = g.print, g.printf
+    local function record(text)
+        if type(text) == "string" then seen[#seen + 1] = text end
+    end
+    g.print = function(text, ...) record(text); return print0(text, ...) end
+    g.printf = function(text, ...) record(text); return printf0(text, ...) end
+    local ok, err = xpcall(fn, function(e)
+        if type(e) == "table" then return tostring(e.message or e.msg or e[1]) end
+        return debug.traceback(e)
+    end)
+    g.print, g.printf = print0, printf0
+    if not ok then errors[#errors + 1] = err end
+    return seen, errors
+end
+
+--- Words a screen may still show in Latin letters in Chinese: button glyph names, the
+--- hardware's own labels, and the numbers' units.
+local LATIN_ALLOWED = {
+    Boss = true, Start = true, Select = true, START = true, SELECT = true, Enter = true, Esc = true,
+    -- The mods folder's path, which is a path on the SD card in any language.
+    sdmc = true, mods = true,
+}
+
+--- Every run of four or more Latin letters a translated screen printed.
+local function english_left(seen)
+    local out = {}
+    for _, s in ipairs(seen) do
+        for word in s:gmatch("%a%a%a%a+") do
+            if not LATIN_ALLOWED[word] then out[#out + 1] = word .. " (in \"" .. s .. "\")" end
+        end
+    end
+    return out
+end
+
+suite.test("in Chinese, the menus, the run screens and the end screens print no English", function()
+    local MainMenuUI = require("main_menu_ui")
+    local ProfileUI = require("profile_ui")
+    local ModsUI = require("mods_ui")
+    local CollectionUI = require("collection_ui")
+    local GameOverUI = require("game_over_ui")
+    local YouWinUI = require("you_win")
+    local RunInfoUI = require("run_info_ui")
+    local DeckViewUI = require("deck_view_ui")
+    require("topUI")
+    local game = bootstrap.new_game(5503)
+    G = game
+    local top = _G.TopUI()
+    game.SETTINGS.LANGUAGE = "zh_CN"
+    game:apply_language("zh_CN")
+
+    local all_seen, all_errors = {}, {}
+    local function screen(name, fn)
+        local seen, errors = capture(fn)
+        for _, s in ipairs(seen) do all_seen[#all_seen + 1] = s end
+        for _, e in ipairs(errors) do all_errors[#all_errors + 1] = name .. ": " .. e end
+    end
+
+    game:enter_main_menu()
+    for _, page in ipairs({ "main", "play", "options" }) do
+        screen("menu " .. page, function()
+            MainMenuUI.open_page(game, page)
+            MainMenuUI.draw_bottom(game)
+            MainMenuUI.draw_top("top", game)
+        end)
+    end
+    screen("how to play", function()
+        MainMenuUI.open_how_to_play(game)
+        for i = 1, #MainMenuUI.how_to_play_pages() do
+            game._how_to_play_page = i
+            MainMenuUI.draw_bottom(game)
+        end
+    end)
+    screen("challenges", function()
+        MainMenuUI.open_challenges(game)
+        MainMenuUI.draw_bottom(game)
+        MainMenuUI.draw_top("top", game)
+    end)
+    screen("deck select", function()
+        MainMenuUI.open_deck_select(game)
+        MainMenuUI.draw_bottom(game)
+        MainMenuUI.draw_top("top", game)
+    end)
+    screen("collection", function()
+        CollectionUI.open(game)
+        MainMenuUI.draw_bottom(game)
+        MainMenuUI.draw_top("top", game)
+        CollectionUI.open_category(game, "jokers")
+        MainMenuUI.draw_bottom(game)
+        MainMenuUI.draw_top("top", game)
+    end)
+    screen("profile", function()
+        ProfileUI.open(game)
+        MainMenuUI.draw_bottom(game)
+        game._profile_show_stats = true
+        MainMenuUI.draw_bottom(game)
+        ProfileUI.open_stats(game)
+        MainMenuUI.draw_bottom(game)
+    end)
+    screen("mods", function()
+        ModsUI.open(game)
+        MainMenuUI.draw_bottom(game)
+    end)
+    screen("settings", function()
+        game:open_settings_from_menu()
+        for _, tab in ipairs({ "game", "audio", "controls", "art" }) do
+            game._pause_settings_tab = tab
+            game:draw_bottom_pause()
+        end
+    end)
+
+    -- A run.
+    game:start_new_run_from_main_menu()
+    if game.STATE ~= game.STATES.BLIND_SELECT then game:enter_blind_select() end
+    screen("blind select", function()
+        T.assert_eq(game.STATE, game.STATES.BLIND_SELECT, "reached blind select")
+        game:draw()
+        top:draw("top")
+    end)
+    screen("pause", function()
+        game:enter_pause_menu()
+        game._pause_show_settings = nil
+        game:draw_bottom_pause()
+        game:exit_pause_menu()
+    end)
+    screen("run info", function()
+        RunInfoUI.draw_top("top", game)
+        RunInfoUI.draw_bottom(game)
+    end)
+    screen("deck view", function()
+        DeckViewUI.draw_top("top", game)
+    end)
+    screen("round win", function()
+        -- Builds the payout rows; the state change itself rides the end-of-round animation.
+        game:enter_round_win_after_blind()
+        game:set_state(game.STATES.ROUND_EVAL)
+        T.assert_true(#(game._round_win_display_lines or {}) > 0, "the payout rows are built")
+        game:draw()
+        top:draw("top")
+    end)
+    screen("shop", function()
+        game:enter_shop_after_blind()
+        T.assert_eq(game.STATE, game.STATES.SHOP, "reached the shop")
+        game:draw()
+        top:draw("top")
+        for i = 1, #(game.shop_booster_offers or {}) do
+            game:_draw_shop_booster_tooltip(game.shop_booster_offers[i], { x = 10, y = 10, w = 60, h = 80 })
+        end
+    end)
+    screen("booster pack", function()
+        game.money = 100
+        game:buy_shop_booster(1)
+        T.assert_eq(game.STATE, game.STATES.OPEN_BOOSTER, "opened a pack")
+        game:draw()
+        top:draw("top")
+    end)
+    screen("game over", function()
+        GameOverUI.draw_top(game)
+        GameOverUI.draw_bottom(game)
+    end)
+    screen("you win", function()
+        YouWinUI.drawTop(game)
+    end)
+
+    T.assert_eq(#all_errors, 0, table.concat(all_errors, "\n"))
+    T.assert_true(#all_seen > 100, "the screens drew their text (" .. #all_seen .. " strings)")
+    local left = english_left(all_seen)
+    T.assert_eq(#left, 0, "English left on Chinese screens:\n" .. table.concat(left, "\n"))
+    back_to_english(game)
+end)
+
 return suite

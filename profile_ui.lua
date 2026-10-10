@@ -374,7 +374,7 @@ function ProfileUI.draw_bottom(game)
             fill_rect(inner_x, row_y, LABEL_W, ROW_H, C.LIGHT_GREY, C)
             love.graphics.setFont(font_s)
             love.graphics.setColor(C.BLOCK.BACK)
-            love.graphics.printf(row.label, inner_x + 2, label_y({ y = row_y, h = ROW_H }, font_s), LABEL_W - 4, "center")
+            love.graphics.printf(I18N.text("profile.row." .. tostring(row.key), nil, row.label), inner_x + 2, label_y({ y = row_y, h = ROW_H }, font_s), LABEL_W - 4, "center")
             draw_progress_bar(game, bar_x, row_y, bar_w, ROW_H, row.have, row.total, font_s, font_t)
             row_y = row_y + ROW_H + ROW_GAP
         end
