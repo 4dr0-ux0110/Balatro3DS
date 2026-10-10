@@ -5,6 +5,7 @@
 --- machinery. The 3DS has no fragment shaders, so every enabled glyph is a CPU
 --- transform and draw; callers must keep it to short, static headlines.
 local DynaText = {}
+local Utf8 = require("utf8_text")
 
 local PI = math.pi
 local TWO_PI = PI * 2
@@ -65,18 +66,17 @@ end
 --- a headline that changes a few times a round, not a few times a second. `getWidth` in
 --- particular is a call across the Lua boundary into the font's glyph table.
 ---
---- Byte slices, exactly as before: `sub(i, i)` is what the old loop did, and switching to
---- codepoints here would change which characters get their own transform.
+--- One entry per UTF-8 character. For ASCII that is one per byte, exactly as the old
+--- `sub(i, i)` loop split it; for a translated headline it keeps each Chinese character whole
+--- instead of animating its three bytes as three broken glyphs.
 local function glyph_layout(state, text, font)
     local cache = state.layout
     if cache and cache.text == text and cache.font == font then return cache end
 
-    local glyphs, widths = {}, {}
-    local count = #text
+    local glyphs, widths = Utf8.chars(text), {}
+    local count = #glyphs
     for i = 1, count do
-        local glyph = text:sub(i, i)
-        glyphs[i] = glyph
-        widths[i] = font:getWidth(glyph)
+        widths[i] = font:getWidth(glyphs[i])
     end
 
     cache = {

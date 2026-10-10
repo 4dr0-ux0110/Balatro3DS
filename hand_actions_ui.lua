@@ -214,8 +214,8 @@ function HandActionsUI.draw(game)
         end
     end
 
-    draw_binding(R.play, "play", "Play", play_ok and C.WHITE or C.UI.TEXT_INACTIVE)
-    draw_binding(R.discard, "discard", "Discard", disc_ok and C.WHITE or C.UI.TEXT_INACTIVE)
+    draw_binding(R.play, "play", I18N.text("action.play_hand", nil, "Play"), play_ok and C.WHITE or C.UI.TEXT_INACTIVE)
+    draw_binding(R.discard, "discard", I18N.text("action.discard", nil, "Discard"), disc_ok and C.WHITE or C.UI.TEXT_INACTIVE)
 
     local sort_button = game.get_button_for_role and game:get_button_for_role("cancel") or nil
     love.graphics.setColor(C.WHITE)

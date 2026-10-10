@@ -218,7 +218,7 @@ local function draw_hidden_collection_tooltip(node)
     local card_h = node.VT.h * node.VT.scale
     local font = G.FONTS.PIXEL.SMALL or love.graphics.getFont()
     local TooltipDraw = require("tooltip_draw")
-    TooltipDraw.draw_tooltip_layout(font, "Not Discovered", {}, draw_x, draw_y, card_w, card_h)
+    TooltipDraw.draw_tooltip_layout(font, I18N.text("term.not_discovered", nil, "Not Discovered"), {}, draw_x, draw_y, card_w, card_h)
 end
 
 function CollectionUI.draw_entry_tooltip(game, node, draw_x, draw_y)
@@ -641,6 +641,7 @@ function CollectionUI.draw_category_menu(game)
     game._collection_menu_rects = {}
 
     local function add_btn(id, x, yy, w, h, label, color_key)
+        label = I18N.text("collection.category." .. id, nil, label)
         local rect = { x = x, y = yy, w = w, h = h, category = id }
         game._collection_menu_rects[#game._collection_menu_rects + 1] = rect
         local prog = CollectionCatalog.get_progress(game, id)
@@ -668,7 +669,7 @@ function CollectionUI.draw_category_menu(game)
 
     love.graphics.setFont(font_s)
     love.graphics.setColor(C.GREY)
-    love.graphics.printf("CONSUMABLES", cons_x, cons_y + cons_pad, cons_w, "center")
+    love.graphics.printf(I18N.text("collection.consumables", nil, "CONSUMABLES"), cons_x, cons_y + cons_pad, cons_w, "center")
 
     local cy = cons_y + cons_header_h + cons_pad
     cy = add_btn("tarots", cons_x + cons_pad, cy, cons_inner_w, small_h, "Tarot Cards", "PURPLE")
@@ -686,10 +687,10 @@ function CollectionUI.draw_category_menu(game)
 
     game._collection_back_rect = { x = 8, y = H - 22, w = 64, h = 18 }
     draw_collection_button(
-        game._collection_back_rect, "Back", nil, C.MULT, C, font_s, font_s)
+        game._collection_back_rect, I18N.text("common.back", nil, "Back"), nil, C.MULT, C, font_s, font_s)
 
     love.graphics.setColor(C.GREY)
-    love.graphics.printf("B/X: Back", 0, H - 12, W, "center")
+    love.graphics.printf(I18N.text("collection.back_hint", nil, "B/X: Back"), 0, H - 12, W, "center")
 end
 
 function CollectionUI.draw_grid(game)
@@ -716,7 +717,7 @@ function CollectionUI.draw_grid(game)
     love.graphics.setFont(game.FONTS.PIXEL.SMALL)
     love.graphics.setColor(game.C.GREY)
     love.graphics.printf(
-        "LEFT/RIGHT: Pages   B/X: Back",
+        I18N.text("collection.grid_footer", nil, "LEFT/RIGHT: Pages   B/X: Back"),
         0, nav_y, W, "center")
 end
 
@@ -780,7 +781,8 @@ function CollectionUI.draw_top(screen, game)
 
     if game._menu_sub_state == "collection_grid" then
         local cat = CollectionCatalog.get_category_def(game._collection_category)
-        local label = cat and cat.label or "Collection"
+        local label = cat and I18N.text("collection.category." .. tostring(game._collection_category), nil, cat.label)
+            or I18N.text("collection.title", nil, "Collection")
         local page = tonumber(game._collection_page) or 1
         local pages = CollectionUI.page_count(game)
         love.graphics.printf(label, 0 - textDepth, 12, W, "center")
@@ -788,7 +790,7 @@ function CollectionUI.draw_top(screen, game)
         love.graphics.setColor(game.C.GREY)
         love.graphics.printf(string.format("%d / %d", page, pages), 0 - textDepth, 32, W, "center")
     else
-        love.graphics.printf("Collection", 0 - textDepth, 20, W, "center")
+        love.graphics.printf(I18N.text("collection.title", nil, "Collection"), 0 - textDepth, 20, W, "center")
     end
 end
 

@@ -609,19 +609,6 @@ local function joker_effect_kind(joker)
     return nil
 end
 
-local function rank_to_label(r)
-    if r == 14 then
-        return "Ace"
-    elseif r == 13 then
-        return "King"
-    elseif r == 12 then
-        return "Queen"
-    elseif r ~= nil then
-        return tostring(r)
-    end
-    return "-"
-end
-
 local function describe_joker_effect_lines(joker)
     local et = joker_effect_kind(joker)
     local cfg = joker.effect_config or {}
@@ -743,45 +730,45 @@ local LIVE_XMULT_TEXT = {
             free = math.max(0, cap - used)
         end
         free = tonumber(free) or 0
-        return string.format("(Currently X%s)", fmt_runtime_number(free + 1, 2))
+        return I18N.t("term.current_value", { value = "X" .. fmt_runtime_number(free + 1, 2) })
     end,
     j_steel_joker = function(_)
         local steel = count_full_deck(function(c) return c.enhancement == "steel" end)
         local x = 1 + (0.2 * steel)
-        return "(Currently X" .. fmt_runtime_number(x, 2) .. " Mult)"
+        return I18N.t("term.current_xmult", { value = fmt_runtime_number(x, 2) })
     end,
-    j_constellation = function(j) return "(Currently X" .. fmt_runtime_number(j.stored_xmult or 1, 2) .. " Mult)" end,
-    j_madness = function(j) return "(Currently X" .. fmt_runtime_number(j.stored_xmult or 1, 2) .. " Mult)" end,
-    j_vampire = function(j) return "(Currently X" .. fmt_runtime_number(j.stored_xmult or 1, 2) .. " Mult)" end,
-    j_hologram = function(j) return "(Currently X" .. fmt_runtime_number(j.stored_xmult or 1, 2) .. " Mult)" end,
-    j_obelisk = function(j) return "(Currently X" .. fmt_runtime_number(j.stored_xmult or 1, 2) .. " Mult)" end,
+    j_constellation = function(j) return I18N.t("term.current_xmult", { value = fmt_runtime_number(j.stored_xmult or 1, 2) }) end,
+    j_madness = function(j) return I18N.t("term.current_xmult", { value = fmt_runtime_number(j.stored_xmult or 1, 2) }) end,
+    j_vampire = function(j) return I18N.t("term.current_xmult", { value = fmt_runtime_number(j.stored_xmult or 1, 2) }) end,
+    j_hologram = function(j) return I18N.t("term.current_xmult", { value = fmt_runtime_number(j.stored_xmult or 1, 2) }) end,
+    j_obelisk = function(j) return I18N.t("term.current_xmult", { value = fmt_runtime_number(j.stored_xmult or 1, 2) }) end,
     j_throwback = function(_)
         local skipped = (G and tonumber(G.skipsTaken)) or 0
         local x = 1 + (0.25 * skipped)
-        return "(Currently X" .. fmt_runtime_number(x, 2) .. " Mult)"
+        return I18N.t("term.current_xmult", { value = fmt_runtime_number(x, 2) })
     end,
-    j_glass = function(j) return "(Currently X" .. fmt_runtime_number(j.stored_xmult or 1, 2) .. " Mult)" end,
-    j_hit_the_road = function(j) return "(Currently X" .. fmt_runtime_number(j.stored_xmult or 1, 2) .. " Mult)" end,
-j_canio = function(j) return "(Currently X" .. fmt_runtime_number(j.stored_xmult or 1, 2) .. " Mult)" end,
-    j_yorick = function(j) return "(Currently X" .. fmt_runtime_number(j.stored_xmult or 1, 2) .. " Mult)" end,
-    j_lucky_cat = function(j) return "(Currently X" .. fmt_runtime_number(j.stored_xmult or 1, 2) .. " Mult)" end,
-    j_campfire = function(j) return "(Currently X" .. fmt_runtime_number(j.stored_xmult or 1, 2) .. " Mult)" end,
+    j_glass = function(j) return I18N.t("term.current_xmult", { value = fmt_runtime_number(j.stored_xmult or 1, 2) }) end,
+    j_hit_the_road = function(j) return I18N.t("term.current_xmult", { value = fmt_runtime_number(j.stored_xmult or 1, 2) }) end,
+j_canio = function(j) return I18N.t("term.current_xmult", { value = fmt_runtime_number(j.stored_xmult or 1, 2) }) end,
+    j_yorick = function(j) return I18N.t("term.current_xmult", { value = fmt_runtime_number(j.stored_xmult or 1, 2) }) end,
+    j_lucky_cat = function(j) return I18N.t("term.current_xmult", { value = fmt_runtime_number(j.stored_xmult or 1, 2) }) end,
+    j_campfire = function(j) return I18N.t("term.current_xmult", { value = fmt_runtime_number(j.stored_xmult or 1, 2) }) end,
     j_ramen = function(j)
         local x = tonumber(j.runtime_counter) or 2
-        return "(Currently X" .. fmt_runtime_number(x, 2) .. " Mult)"
+        return I18N.t("term.current_xmult", { value = fmt_runtime_number(x, 2) })
     end,
 }
 
 local LIVE_MULT_TEXT = {
-    j_ceremonial = function(j) return string.format("(Currently +%d Mult)", math.floor(tonumber(j.stored_mult) or 0)) end,
-    j_abstract = function() return string.format("(Currently +%d Mult)", 3 * ((G and G.jokers and #G.jokers) or 0)) end,
-    j_ride_the_bus = function(j) return string.format("(Currently +%d Mult)", math.floor(tonumber(j.runtime_counter) or 0)) end,
-    j_green_joker = function(j) return string.format("(Currently +%d Mult)", math.floor(tonumber(j.stored_mult) or 0)) end,
-    j_red_card = function(j) return string.format("(Currently +%d Mult)", math.floor(tonumber(j.stored_mult) or 0)) end,
+    j_ceremonial = function(j) return I18N.t("term.current_mult", { value = math.floor(tonumber(j.stored_mult) or 0) }) end,
+    j_abstract = function() return I18N.t("term.current_mult", { value = 3 * ((G and G.jokers and #G.jokers) or 0) }) end,
+    j_ride_the_bus = function(j) return I18N.t("term.current_mult", { value = math.floor(tonumber(j.runtime_counter) or 0) }) end,
+    j_green_joker = function(j) return I18N.t("term.current_mult", { value = math.floor(tonumber(j.stored_mult) or 0) }) end,
+    j_red_card = function(j) return I18N.t("term.current_mult", { value = math.floor(tonumber(j.stored_mult) or 0) }) end,
     j_erosion = function()
         local cnt = count_full_deck()
         local start_size = get_full_deck_starting_size()
-        return string.format("(Currently +%d Mult)", math.max(0, (start_size - cnt) * 4))
+        return I18N.t("term.current_mult", { value = math.max(0, (start_size - cnt) * 4) })
     end,
     j_swashbuckler = function(j)
         local total = 0
@@ -790,29 +777,29 @@ local LIVE_MULT_TEXT = {
                 total = total + (tonumber(owned.sell_cost) or 0)
             end
         end
-        return string.format("(Currently +%d Mult)", math.floor(total))
+        return I18N.t("term.current_mult", { value = math.floor(total) })
     end,
-    j_bootstraps = function() return string.format("(Currently +%d Mult)", math.floor((tonumber(G and G.money) or 0) / 5) * 2) end,
-    j_flash_card = function(j) return string.format("(Currently +%d Mult)", math.floor(tonumber(j.stored_mult) or 0)) end,
-    j_spare_trousers = function(j) return string.format("(Currently +%d Mult)", math.floor(tonumber(j.stored_mult) or 0)) end,
-    j_fortune_teller = function() return string.format("(Currently +%d)", math.floor(tonumber(G and G.tarots_used) or 0)) end,
-    j_popcorn = function(j) return string.format("+%d Mult", math.floor(tonumber(j.stored_mult) or 0)) end,
+    j_bootstraps = function() return I18N.t("term.current_mult", { value = math.floor((tonumber(G and G.money) or 0) / 5) * 2 }) end,
+    j_flash_card = function(j) return I18N.t("term.current_mult", { value = math.floor(tonumber(j.stored_mult) or 0) }) end,
+    j_spare_trousers = function(j) return I18N.t("term.current_mult", { value = math.floor(tonumber(j.stored_mult) or 0) }) end,
+    j_fortune_teller = function() return I18N.t("term.current_value", { value = "+" .. math.floor(tonumber(G and G.tarots_used) or 0) }) end,
+    j_popcorn = function(j) return I18N.t("tooltip.mult", { value = "+" .. math.floor(tonumber(j.stored_mult) or 0) }) end,
 }
 
 local LIVE_CHIPS_TEXT = {
     j_ice_cream = function(j)
         local n = math.max(0, math.floor(tonumber(j.runtime_counter) or 0))
-        return string.format("(Currently +%d Chips)", n)
+        return I18N.t("term.current_chips", { value = n })
     end,
-    j_runner = function(j) return string.format("(Currently +%d Chips)", math.floor(tonumber(j.stored_chips) or 0)) end,
-    j_blue_joker = function() return string.format("(Currently +%d Chips)", 2 * count_cards_in_deck()) end,
-    j_square = function(j) return string.format("(Currently +%d Chips)", math.floor(tonumber(j.stored_chips) or 0)) end,
-    j_wee = function(j) return string.format("(Currently +%d Chips)", math.floor(tonumber(j.stored_chips) or 0)) end,
-    j_stone_joker = function() return string.format("(Currently +%d Chips)", 25 * count_full_deck(function(c) return c.enhancement == "stone" end)) end,
-    j_bull = function() return string.format("(Currently +%d Chips)", 2 * (tonumber(G and G.money) or 0)) end,
+    j_runner = function(j) return I18N.t("term.current_chips", { value = math.floor(tonumber(j.stored_chips) or 0) }) end,
+    j_blue_joker = function() return I18N.t("term.current_chips", { value = 2 * count_cards_in_deck() }) end,
+    j_square = function(j) return I18N.t("term.current_chips", { value = math.floor(tonumber(j.stored_chips) or 0) }) end,
+    j_wee = function(j) return I18N.t("term.current_chips", { value = math.floor(tonumber(j.stored_chips) or 0) }) end,
+    j_stone_joker = function() return I18N.t("term.current_chips", { value = 25 * count_full_deck(function(c) return c.enhancement == "stone" end) }) end,
+    j_bull = function() return I18N.t("term.current_chips", { value = 2 * (tonumber(G and G.money) or 0) }) end,
 }
 
-function Joker:get_live_current_tooltip_text(base_text)
+function Joker:get_live_current_tooltip_text(base_text, runtime)
     local id = self.def and self.def.id or nil
     if type(id) ~= "string" then return base_text end
 
@@ -822,72 +809,71 @@ function Joker:get_live_current_tooltip_text(base_text)
     end
 
     if id == "j_cloud_9" then
-        return string.format("(Currently $%d)", count_full_deck(function(c) return tonumber(c.rank) == 9 end))
+        return I18N.t("term.current_money", { value = count_full_deck(function(c) return tonumber(c.rank) == 9 end) })
     end
     if id == "j_rocket" then
         local n = math.max(1, math.floor(tonumber(self.running_count) or 1))
-        return string.format("(Currently $%d)", n)
+        return I18N.t("term.current_money", { value = n })
     end
     if id == "j_mail" then
-        local r = tonumber(self.random_rank)
-        local label = rank_to_label(r)
-        return string.format("Earn *$5* for each discarded *%s*,", label)
+        return I18N.t("joker.dynamic.mail", { rank = I18N.rank_name(tonumber(self.random_rank) or "-") })
     end
     if id == "j_idol" then
-        local r = tonumber(self.random_rank)
-        local label = rank_to_label(r)
         local s = self.random_suit
         if type(s) ~= "string" or s == "" then
             s = "-"
         end
-        return string.format("Each played *%s* of *%s* gives *X2 Mult* when scored,", label, s)
+        return I18N.t("joker.dynamic.idol", {
+            rank = I18N.rank_name(tonumber(self.random_rank) or "-"),
+            suit = I18N.suit_name(s),
+        })
     end
     if id == "j_invisible" then
-        return string.format("(Currently %d/2)", math.floor(tonumber(self.runtime_counter) or 0))
+        return I18N.t("term.current_value", { value = math.floor(tonumber(self.runtime_counter) or 0) .. "/2" })
     end
     if id == "j_drivers_license" then
         local enhanced = count_full_deck(function(c) return c.enhancement ~= nil and c.enhancement ~= "" end)
-        return string.format("(Currently %d)", enhanced)
+        return I18N.t("term.current_value", { value = enhanced })
     end
     if id == "j_loyalty_card" then
         local remaining = tonumber(self.runtime_counter) or 6
-        return string.format("%d remaining", math.floor(remaining))
+        return I18N.t("term.remaining", { value = math.floor(remaining) })
     end
     if id == "j_ancient_joker" then
         local s = self.random_suit
         if type(s) ~= "string" or s == "" then
             s = "-"
         end
-        return string.format("Each played card with %s gives X1.5 Mult when scored", s)
+        return I18N.t("joker.dynamic.ancient", { suit = I18N.suit_name(s) })
     end
     if id == "j_seltzer" then
         local n = math.max(0, math.floor(tonumber(self.runtime_counter) or 0))
         if n == 1 then
-            return "(Currently 1 hand remaining)"
+            return I18N.t("term.hands_remaining_one")
         end
-        return string.format("(Currently %d hands remaining)", n)
+        return I18N.t("term.hands_remaining", { value = n })
     end
     if id == "j_turtle_bean" then
         local n = math.max(0, math.floor(tonumber(self.runtime_counter) or 0))
-        return string.format("(Currently +%d hand size)", n)
+        return I18N.t("term.hand_size_current", { value = n })
     end
     if id == "j_castle" then
         local bt = tostring(base_text or "")
-        if bt:find("(Currently", 1, true) then
-            return string.format("(Currently +%d Chips)", math.floor(tonumber(self.runtime_counter) or 0))
+        if runtime == "value" or bt:find("(Currently", 1, true) then
+            return I18N.t("term.current_chips", { value = math.floor(tonumber(self.runtime_counter) or 0) })
         end
         local s = self.random_suit
         if type(s) ~= "string" or s == "" then
             s = "-"
         end
-        return string.format("This Joker gains +3 Chips per discarded %s", s)
+        return I18N.t("joker.dynamic.castle", { suit = I18N.suit_name(s) })
     end
     if id == "j_todo_list" then
         local rh = self.random_hand
         if type(rh) ~= "string" or rh == "" then
             rh = "-"
         end
-        return string.format("Earn *$4* if poker hand is a *%s*,", rh)
+        return I18N.t("joker.dynamic.todo", { hand = I18N.hand_name(rh) })
     end
     return base_text
 end
@@ -895,10 +881,9 @@ end
 function Joker:get_edition_tooltip_lines()
     local ed = Joker.normalize_edition(self.edition)
     if ed == "base" then return {} end
-    if ed == "foil" then return { { kind = "text", text = "Foil: +50 Chips when hand is scored" } } end
-    if ed == "holo" then return { { kind = "text", text = "Holographic: +10 Mult when hand is scored" } } end
-    if ed == "polychrome" then return { { kind = "text", text = "Polychrome: ×1.5 Mult when hand is scored" } } end
-    if ed == "negative" then return { { kind = "text", text = "Negative: +1 Joker slot" } } end
+    if ed == "foil" or ed == "holo" or ed == "polychrome" or ed == "negative" then
+        return { { kind = "text", text = I18N.t("edition." .. ed .. ".description") } }
+    end
     return {}
 end
 
@@ -912,15 +897,15 @@ function Joker:get_tooltip_body_lines()
         -- `:2139`, `:2197`); only Perishable was explained here, so an Eternal or Rental
         -- Joker showed a sprite the player had no way to read.
         if self.eternal == true then
-            table.insert(lines, { kind = "text", text = "Eternal: can't be sold or destroyed" })
+            table.insert(lines, { kind = "text", text = I18N.t("sticker.eternal.description") })
         end
         if self.perishable == true then
             local remaining = math.max(0, math.floor(tonumber(self.perishable_counter) or 5))
-            local unit = remaining == 1 and "round" or "rounds"
-            table.insert(lines, { kind = "text", text = string.format("Perishable: %d %s remaining", remaining, unit) })
+            table.insert(lines, { kind = "text", text = I18N.t(
+                remaining == 1 and "term.perishable_one" or "term.perishable", { rounds = remaining }) })
         end
         if self.rental == true then
-            table.insert(lines, { kind = "text", text = "Rental: lose $3 at end of round" })
+            table.insert(lines, { kind = "text", text = I18N.t("sticker.rental.description") })
         end
         for _, el in ipairs(edition_lines) do
             table.insert(lines, el)
@@ -930,6 +915,27 @@ function Joker:get_tooltip_body_lines()
     if type(def.mod_tooltip) == "function" then
         local lines = def.mod_tooltip(self)
         if type(lines) == "table" and #lines > 0 then return append_extra(lines) end
+    end
+    -- A translated description (`locales/content/<language>/jokers.lua`) replaces the catalog's
+    -- English lines. English has none of these, so it keeps the catalog's untouched. The rarity
+    -- badge the catalog puts first is rebuilt in the language, and live lines (`kind =
+    -- "current"`) are still filled in by `get_live_current_tooltip_text`.
+    if type(def.id) == "string" and I18N.has("joker." .. def.id .. ".description") then
+        local out = {}
+        local rarity = tonumber(def.rarity)
+        local rarity_key = ({ "common", "uncommon", "rare", "legendary" })[rarity or 0]
+        if rarity_key then
+            out[1] = { kind = "rarity_badge", text = I18N.t("rarity." .. rarity_key), rarity = rarity }
+        end
+        for _, l in ipairs(I18N.content_lines("joker", def.id)) do
+            out[#out + 1] = type(l) == "table" and l or { kind = "text", text = l }
+        end
+        if impl and type(impl.tooltip_lines) == "function" then
+            for _, line in ipairs(impl.tooltip_lines(self) or {}) do
+                out[#out + 1] = type(line) == "table" and line or { kind = "text", text = line }
+            end
+        end
+        return append_extra(out)
     end
     if type(def.tooltip) == "table" then
         local out = {}
@@ -1005,16 +1011,16 @@ function Joker:resolve_tooltip_line_segments(line_def)
 
     local text = tostring(line_def.text or "")
     if line_def.kind == "current" then
-        text = self:get_live_current_tooltip_text(text)
+        text = self:get_live_current_tooltip_text(text, line_def.runtime)
     end
     return TooltipDraw.build_segments_from_text(text)
 end
 
 function Joker:draw_tooltip(draw_x, draw_y)
     local def = self.def or {}
-    local title = self.name or def.name or "Joker"
+    local title = I18N.content_name("joker", def.id, self.name or def.name or "Joker")
     if G and G.is_discovered and def.id and not G:is_discovered(def.id) then
-        title = "Not Discovered"
+        title = I18N.t("term.not_discovered")
     end
     local lines = self:get_tooltip_body_lines()
     local font = G.FONTS.PIXEL.SMALL or love.graphics.getFont()

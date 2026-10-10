@@ -176,6 +176,19 @@ aseprite -b plus_four.png --script dev/aseprite/hsl_invert_transform.lua --save-
 
 Run it on the finished normal image; don't edit the negative afterwards.
 
+## Translations
+
+`loc_txt` can hold one table per language, as in Steamodded. Use `en-us` for English, and the game's own codes (as in `locales/`, e.g. `zh_CN`) for the others:
+
+```lua
+loc_txt = {
+    ["en-us"] = { name = "Plus Four", text = { "{C:mult}+#1#{} Mult" } },
+    zh_CN     = { name = "加四", text = { "{C:mult}+#1#{}倍率" } },
+},
+```
+
+The card shows the player's chosen language when it has one, and English when it doesn't. A single `{ name, text }` table works too; it is used for every language.
+
 ## Modifiers
 
 A Joker or Voucher changes these numbers just by declaring them in `config`. The effect lasts while the Joker is held or the Voucher is owned, and needs no code:

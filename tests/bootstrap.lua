@@ -61,6 +61,7 @@ function bootstrap.load()
         require(name)
     end
 
+    _G.I18N = require("localization")
     _G.Sfx = require("sfx")
     _G.Fx = require("fx")
 

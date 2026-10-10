@@ -1,6 +1,7 @@
 --- Shared item tooltips
 
 local M = {}
+local Utf8 = require("utf8_text")
 
 local TOOLTIP_PAD_X = 8
 local TOOLTIP_HEADER_PAD_Y = 3
@@ -308,7 +309,13 @@ local function wrap_segments(font, segments, limit)
         -- Keep the separators: a colour run can begin or end mid-word, so joining on a single
         -- space would move the spacing between runs and shift the whole line.
         for chunk, gap in tostring(seg.text or ""):gmatch("(%S*)(%s*)") do
-            if chunk ~= "" then words[#words + 1] = { text = chunk, color_key = color_key } end
+            if chunk ~= "" then
+                -- Chinese has no spaces: a line may break between any two of its characters.
+                -- Latin text comes back as one piece, so English wraps exactly as before.
+                for _, piece in ipairs(Utf8.break_pieces(chunk)) do
+                    words[#words + 1] = { text = piece, color_key = color_key }
+                end
+            end
             if gap ~= "" then words[#words + 1] = { text = gap, color_key = color_key, space = true } end
         end
     end

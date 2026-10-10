@@ -11,7 +11,7 @@ local WIN_QUIPS = {
 function YouWinUI.quip(game)
     local index = ((math.floor(tonumber(game.round) or 0) + math.floor(tonumber(game.ante) or 0))
         % #WIN_QUIPS) + 1
-    return WIN_QUIPS[index]
+    return I18N.text("win.quip." .. index, nil, WIN_QUIPS[index])
 end
 
 local function fmt_num(n)
@@ -20,7 +20,7 @@ end
 
 YouWinUI.information = {
     {
-        title = "Best Hand",
+        title = "Best Hand", key = "best_hand",
         color = function(G)
             return G.C.MULT
         end,
@@ -29,16 +29,16 @@ YouWinUI.information = {
         end,
     },
     {
-        title = "Most Played Hand",
+        title = "Most Played Hand", key = "most_played_hand",
         content = function(G)
             if G.get_most_played_hand_name then
-                return G:get_most_played_hand_name()
+                return I18N.hand_name(G:get_most_played_hand_name())
             end
-            return "None"
+            return I18N.text("common.none", nil, "None")
         end,
     },
     {
-        title = "Cards Played",
+        title = "Cards Played", key = "cards_played",
         color = function(G)
             return G.C.CHIPS
         end,
@@ -47,7 +47,7 @@ YouWinUI.information = {
         end,
     },
     {
-        title = "Cards Discarded",
+        title = "Cards Discarded", key = "cards_discarded",
         color = function(G)
             return G.C.MULT
         end,
@@ -56,7 +56,7 @@ YouWinUI.information = {
         end,
     },
     {
-        title = "Cards Purchased",
+        title = "Cards Purchased", key = "cards_purchased",
         color = function(G)
             return G.C.MONEY
         end,
@@ -65,7 +65,7 @@ YouWinUI.information = {
         end,
     },
     {
-        title = "Times Rerolled",
+        title = "Times Rerolled", key = "times_rerolled",
         color = function(G)
             return G.C.GREEN
         end,
@@ -74,14 +74,14 @@ YouWinUI.information = {
         end,
     },
     {
-        title = "New Discoveries",
+        title = "New Discoveries", key = "new_discoveries",
         color = function(G) return G.C.ORANGE end,
         content = function(G) return fmt_num(G.get_run_discoveries and G:get_run_discoveries() or 0) end,
     },
     {
-        title = "Seed",
+        title = "Seed", key = "seed",
         content = function(G)
-            if G.SEED == nil then return "Unknown" end
+            if G.SEED == nil then return I18N.text("common.unknown", nil, "Unknown") end
             return tostring(G.SEED)
         end,
     },
@@ -89,7 +89,7 @@ YouWinUI.information = {
 
 YouWinUI.buttons = {
     {
-        text = "New Run",
+        text = "New Run", key = "new_run",
         callback = function(game)
             if game.continue_from_you_win_new_run then
                 game:continue_from_you_win_new_run()
@@ -100,7 +100,7 @@ YouWinUI.buttons = {
         end,
     },
     {
-        text = "Main Menu",
+        text = "Main Menu", key = "main_menu",
         callback = function(game)
             if game.continue_from_you_win_main_menu then
                 game:continue_from_you_win_main_menu()
@@ -111,7 +111,7 @@ YouWinUI.buttons = {
         end,
     },
     {
-        text = "Endless Mode",
+        text = "Endless Mode", key = "endless_mode",
         callback = function(game)
             if game.continue_from_you_win_endless then
                 game:continue_from_you_win_endless()
@@ -144,19 +144,18 @@ function YouWinUI.drawTop(game)
     local new_count = #(game._newly_unlocked_jokers or {}) + #(game._newly_unlocked_vouchers or {})
     TicketStrip.draw(game, {
         x = panel_x + padding, y = panel_y + padding, w = panel_w - padding * 2, h = 38, stub_w = 70,
-        stub = "CLEARED", title = "You Win!",
-        detail = YouWinUI.quip(game)
-            .. (new_count > 0 and string.format("  %d new unlock%s", new_count, new_count == 1 and "" or "s") or ""),
+        stub = I18N.text("win.stub", nil, "CLEARED"), title = I18N.text("win.title", nil, "You Win!"),
+        detail = YouWinUI.quip(game) .. require("game_over_ui").new_unlocks_text(new_count),
         stub_color = C.BOOSTER,
         font = font_s,
     })
 
     local data_y = panel_y + 52
     for i, info in ipairs(YouWinUI.information) do
-        local title = info.title or "Unknown"
-        local content = info.content and info.content(game) or "N/A"
-        if title == "Best Hand" and game._run_record_flags and game._run_record_flags.c_best_hand_chips then
-            content = tostring(content) .. "  NEW"
+        local title = info.key and I18N.text("win." .. info.key, nil, info.title) or info.title or "Unknown"
+        local content = info.content and info.content(game) or I18N.text("common.not_available", nil, "N/A")
+        if info.key == "best_hand" and game._run_record_flags and game._run_record_flags.c_best_hand_chips then
+            content = tostring(content) .. I18N.text("run.new_record", nil, "  NEW")
         end
         local color = info.color and info.color(game) or C.WHITE
         TicketStrip.draw(game, {
@@ -187,7 +186,7 @@ function YouWinUI.drawBottom(game)
     game._you_win_button_rects = {}
 
     for i, button in ipairs(YouWinUI.buttons) do
-        local text = button.text
+        local text = button.key and I18N.text("win." .. button.key, nil, button.text) or button.text
         local color = button.color and button.color(game) or C.MULT
         local bx = panel_x + padding
         local by = button_y

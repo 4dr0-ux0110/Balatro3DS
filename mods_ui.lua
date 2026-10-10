@@ -33,8 +33,8 @@ function ModsUI.lines(game)
     local out = {}
     local block = game._mods_continue_block
     if block then
-        out[#out + 1] = { "This run was saved with different mods.", "RED" }
-        out[#out + 1] = { "Change them to continue it:", "RED" }
+        out[#out + 1] = { I18N.text("mods.mismatch_1", nil, "This run was saved with different mods."), "RED" }
+        out[#out + 1] = { I18N.text("mods.mismatch_2", nil, "Change them to continue it:"), "RED" }
         for _, line in ipairs(ModLoader.describe_mismatch(block)) do
             out[#out + 1] = { "  " .. line, "WHITE" }
         end
@@ -42,8 +42,8 @@ function ModsUI.lines(game)
     end
     local mods = ModLoader.mods or {}
     if #mods == 0 then
-        out[#out + 1] = { "No mods installed.", "GREY" }
-        out[#out + 1] = { "Put mods in " .. ModLoader.DIR .. "/ in the save folder.", "GREY" }
+        out[#out + 1] = { I18N.text("mods.none", nil, "No mods installed."), "GREY" }
+        out[#out + 1] = { I18N.text("mods.where", { dir = ModLoader.DIR }, "Put mods in " .. ModLoader.DIR .. "/ in the save folder."), "GREY" }
         return out
     end
     for _, mod in ipairs(mods) do
@@ -55,20 +55,23 @@ function ModsUI.lines(game)
             local parts = {}
             for _, kind in ipairs({ { "jokers", "Joker" }, { "consumables", "Consumable" }, { "vouchers", "Voucher" }, { "deck_skins", "Card Art Set" } }) do
                 local n = #(reg[kind[1]] or {})
-                if n > 0 then parts[#parts + 1] = ("%d %s%s"):format(n, kind[2], n == 1 and "" or "s") end
+                if n > 0 then
+                    parts[#parts + 1] = I18N.text("mods.count." .. kind[1], { count = n },
+                        ("%d %s%s"):format(n, kind[2], n == 1 and "" or "s"))
+                end
             end
-            if #parts == 0 then parts[1] = "Nothing added" end
-            out[#out + 1] = { table.concat(parts, ", ") .. ((mod.author ~= nil and mod.author ~= "")
-                and ("  -  by " .. mod.author) or ""), "GREY" }
+            if #parts == 0 then parts[1] = I18N.text("mods.nothing_added", nil, "Nothing added") end
+            out[#out + 1] = { table.concat(parts, I18N.text("common.list_separator", nil, ", ")) .. ((mod.author ~= nil and mod.author ~= "")
+                and I18N.text("mods.by", { author = mod.author }, "  -  by " .. mod.author) or ""), "GREY" }
         else
-            out[#out + 1] = { "Not loaded: " .. tostring(mod.error), "RED" }
+            out[#out + 1] = { I18N.text("mods.not_loaded", nil, "Not loaded: ") .. tostring(mod.error), "RED" }
         end
         for _, err in ipairs(mod.runtime_errors or {}) do
-            out[#out + 1] = { "Error: " .. tostring(err), "ORANGE" }
+            out[#out + 1] = { I18N.text("mods.error", nil, "Error: ") .. tostring(err), "ORANGE" }
         end
     end
     out[#out + 1] = { " ", "WHITE" }
-    out[#out + 1] = { "Details: " .. ModLoader.LOG_PATH, "GREY" }
+    out[#out + 1] = { I18N.text("mods.details", nil, "Details: ") .. ModLoader.LOG_PATH, "GREY" }
     return out
 end
 
@@ -110,7 +113,7 @@ function ModsUI.draw(game)
     love.graphics.rectangle("fill", 0, 0, SCREEN_W, SCREEN_H)
     love.graphics.setFont(game.FONTS.PIXEL.MEDIUM)
     love.graphics.setColor(C.WHITE)
-    love.graphics.printf("Mods", 0, 10, SCREEN_W, "center")
+    love.graphics.printf(I18N.text("menu.entry.mods", nil, "Mods"), 0, 10, SCREEN_W, "center")
 
     local rows = wrapped(game)
     local top = math.max(0, math.min(max_scroll(rows), math.floor(tonumber(game._mods_scroll) or 0)))
@@ -127,7 +130,7 @@ function ModsUI.draw(game)
     if max_scroll(rows) > 0 then
         love.graphics.setFont(game.FONTS.PIXEL.SMALL)
         love.graphics.setColor(C.GREY)
-        love.graphics.printf("Up/Down to scroll", 0, LIST_BOTTOM + 1, SCREEN_W, "center")
+        love.graphics.printf(I18N.text("mods.scroll_hint", nil, "Up/Down to scroll"), 0, LIST_BOTTOM + 1, SCREEN_W, "center")
     end
 
     game._mods_back_rect = { x = 20, y = SCREEN_H - 30, w = SCREEN_W - 40, h = 24 }
@@ -137,7 +140,7 @@ function ModsUI.draw(game)
     love.graphics.setColor(C.WHITE)
     love.graphics.setFont(game.FONTS.PIXEL.SMALL)
     local font = love.graphics.getFont()
-    love.graphics.printf("Back", r.x, r.y + math.floor((r.h - font:getHeight()) / 2), r.w, "center")
+    love.graphics.printf(I18N.text("common.back", nil, "Back"), r.x, r.y + math.floor((r.h - font:getHeight()) / 2), r.w, "center")
     love.graphics.setLineWidth(2)
     love.graphics.rectangle("line", r.x + 0.5, r.y + 0.5, r.w - 1, r.h - 1)
 end

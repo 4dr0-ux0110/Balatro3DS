@@ -76,6 +76,41 @@ local ROLES = {
     "MICRO", "TINY", "SMALL", "PRICE", "BUTTON", "MEDIUM", "BUTTON_PRICE", "LARGE",
 }
 
+--- Faces for languages m6x11plus cannot draw (`localization.lua`).
+---
+--- The whole CJK font is far too big for the 3DS -- `mkbcfnt` rasterises every glyph, and a full
+--- CJK face is tens of thousands of them -- so `dev/build.sh` cuts GoNotoCJKCore down to the
+--- characters the language's strings actually use and bakes that into one sheet per cell height
+--- (`dev/bake_cjk_font.py`), like the per-size m6x11plus sheets. Desktop has no sheets and draws
+--- from the full `.ttf`.
+---
+--- `min_size` is the smallest size the language is drawn at: m6x11plus's 9 px roles are legible
+--- for Latin pixel text and unreadable for Chinese, so those roles take the next sheet up.
+Fonts.LANGUAGE_FACES = {
+    zh_CN = {
+        native = "resources/fonts/lang/zh_CN_h%d.ttf",
+        source = "resources/fonts/GoNotoCJKCore.ttf",
+        min_size = 13,
+    },
+}
+
+--- Cell heights the language sheets are baked at -- the ones `mkbcfnt` can actually produce from
+--- GoNotoCJKCore (18, 22, 27 and 33 are not reachable from it; 17, 21, 26 and 32 are). A role
+--- draws at the largest of these that fits its size, so the sheet's scale is exactly 1.0 and the
+--- text is at most a pixel smaller than the Latin face's. `dev/config.sh` (CJK_CELL_HEIGHTS)
+--- bakes this same list; `tests/test_localization.lua` fails if they drift.
+Fonts.LANGUAGE_CELL_HEIGHTS = { 13, 17, 21, 26, 32 }
+
+--- The language sheet a role of `size` draws from.
+function Fonts.language_size(face, size)
+    local want = math.max(size, face.min_size)
+    local best = Fonts.LANGUAGE_CELL_HEIGHTS[1]
+    for _, h in ipairs(Fonts.LANGUAGE_CELL_HEIGHTS) do
+        if h <= want then best = h end
+    end
+    return best
+end
+
 --- Load one face. `nearest` filtering is set for desktop's benefit; it is inert on 3DS (see the
 --- header) but costs nothing and keeps nest honest about the pixel grid.
 local function load_font(path, size)
@@ -93,7 +128,18 @@ end
 --- thing the fallback must not do.
 ---@return love.Font|nil font
 ---@return boolean native True when the per-size face loaded (i.e. scale is 1.0 on hardware).
-function Fonts.font_for(profile, size)
+---@return number|nil size the size actually drawn at, when a language face raised it
+function Fonts.font_for(profile, size, language)
+    local face = language and Fonts.LANGUAGE_FACES[language]
+    if face then
+        -- The language's own sheet, then (off-console) its full font. Neither: Latin text
+        -- rather than nothing, and the size the role asked for.
+        local lsize = Fonts.language_size(face, size)
+        local font = load_font(string.format(face.native, lsize), lsize)
+        if font then return font, true, lsize end
+        font = load_font(face.source, lsize)
+        if font then return font, false, lsize end
+    end
     if profile == "native" then
         local font = load_font(string.format(NATIVE_PATH_FORMAT, size), size)
         if font then return font, true end
@@ -107,28 +153,33 @@ end
 --- (`topUI.lua:266`, `:272`, `:331`), so they are part of the table and have to be rebuilt with it
 --- rather than captured once at boot.
 ---@param profile string|nil "shared" (default) or "native"
+---@param language string|nil a `Fonts.LANGUAGE_FACES` key; nil or unknown is m6x11plus
 ---@return table pixel
-function Fonts.build(profile)
+function Fonts.build(profile, language)
     profile = Fonts.PROFILES[profile] and profile or Fonts.DEFAULT_PROFILE
+    if not Fonts.LANGUAGE_FACES[language or ""] then language = nil end
     local sizes = Fonts.PROFILES[profile]
-    local pixel = { PROFILE = profile, FACES = 0, NATIVE_FACES = 0 }
+    local pixel = { PROFILE = profile, LANGUAGE = language, FACES = 0, NATIVE_FACES = 0 }
     -- One face per *distinct* size, not per role: several roles share a size under the native
     -- profile, and each `newFont` linearAllocs its own copy of the whole glyph sheet on 3DS
     -- (there is no rasterizer cache in `wrap_graphics.cpp:398-420`), so a duplicate face is
     -- ~513 KB of a 64 MB machine spent on bytes that already exist.
-    local by_size = {}
+    local by_size, drawn_size = {}, {}
     for _, role in ipairs(ROLES) do
         local size = sizes[role]
         local font = by_size[size]
         if not font then
-            local is_native
-            font, is_native = Fonts.font_for(profile, size)
+            local is_native, actual
+            font, is_native, actual = Fonts.font_for(profile, size, language)
             by_size[size] = font
+            drawn_size[size] = actual or size
             pixel.FACES = pixel.FACES + 1
             if is_native then pixel.NATIVE_FACES = pixel.NATIVE_FACES + 1 end
         end
         pixel[role] = font
-        pixel[role .. "_HEIGHT"] = size
+        -- The size it is really drawn at: layout that reads this before it has a font has to
+        -- see a raised language size, or it lays out for text smaller than what is drawn.
+        pixel[role .. "_HEIGHT"] = drawn_size[size]
     end
     return pixel
 end
@@ -139,14 +190,18 @@ end
 --- the faces per call; replacing the table would strand those captures on the old faces.
 ---@param game table
 ---@param profile string|nil
+---@param language string|nil
 ---@return boolean changed
-function Fonts.apply(game, profile)
+function Fonts.apply(game, profile, language)
     if not game or not game.FONTS or not game.FONTS.PIXEL then return false end
     profile = Fonts.PROFILES[profile] and profile or Fonts.DEFAULT_PROFILE
     local pixel = game.FONTS.PIXEL
-    if pixel.PROFILE == profile then return false end
+    -- No language: keep the live one, so a profile switch never resets it.
+    if language == nil then language = pixel.LANGUAGE end
+    if not Fonts.LANGUAGE_FACES[language or ""] then language = nil end
+    if pixel.PROFILE == profile and pixel.LANGUAGE == language then return false end
 
-    local built = Fonts.build(profile)
+    local built = Fonts.build(profile, language)
     for key in pairs(pixel) do
         if built[key] == nil then pixel[key] = nil end
     end

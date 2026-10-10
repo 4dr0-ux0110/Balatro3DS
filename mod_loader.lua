@@ -44,7 +44,7 @@ local function new_mod(folder)
         folder = folder, path = ModLoader.DIR .. "/" .. folder,
         author = "", description = "", dependencies = {},
         status = "error", error = nil, runtime_errors = {},
-        registered = { jokers = {}, sprites = {}, consumables = {}, vouchers = {}, deck_skins = {} },
+        registered = { jokers = {}, sprites = {}, consumables = {}, vouchers = {}, deck_skins = {}, strings = {} },
     }
 end
 
@@ -266,13 +266,15 @@ function ModLoader.describe_mismatch(diff)
     local lines = {}
     if not diff then return lines end
     for _, m in ipairs(diff.missing) do
-        lines[#lines + 1] = ("Install %s %s"):format(m.id, m.version)
+        lines[#lines + 1] = I18N.text("mods.install", { id = m.id, version = m.version }, ("Install %s %s"):format(m.id, m.version))
     end
     for _, m in ipairs(diff.changed) do
-        lines[#lines + 1] = ("%s: saved with %s, installed %s"):format(m.id, m.saved, m.installed)
+        lines[#lines + 1] = I18N.text("mods.changed", { id = m.id, saved = m.saved, installed = m.installed },
+            ("%s: saved with %s, installed %s"):format(m.id, m.saved, m.installed))
     end
     for _, m in ipairs(diff.extra) do
-        lines[#lines + 1] = ("Remove %s %s (not in this run)"):format(m.id, m.version)
+        lines[#lines + 1] = I18N.text("mods.remove", { id = m.id, version = m.version },
+            ("Remove %s %s (not in this run)"):format(m.id, m.version))
     end
     return lines
 end

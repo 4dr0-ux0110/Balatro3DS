@@ -700,15 +700,15 @@ function DeckViewUI.draw_top(screen, game)
 
     love.graphics.setFont(game.FONTS.PIXEL.SMALL)
     love.graphics.setColor(game.C.JOKER_GREY)
-    TextCache.print("Deck", 8, 6)
+    TextCache.print(I18N.text("deck_view.deck", nil, "Deck"), 8, 6)
 
     local deck_id = game.selected_deck_id or game._pending_deck_id or "b_red"
     local deck_def = (DECK_DEFS_BY_ID and DECK_DEFS_BY_ID[deck_id]) or (DECK_DEFS and DECK_DEFS[1])
     draw_deck_sprite(game, deck_def, 8, 20, DECK_SPRITE_SCALE)
     love.graphics.setFont(game.FONTS.PIXEL.PRICE)
     love.graphics.setColor(game.C.WHITE)
-    TextCache.print(deck_def and deck_def.name or "Deck", 58, 22)
-    local deck_rule = deck_def and deck_def.description or ""
+    TextCache.print(deck_def and I18N.content_name("deck", deck_def.id, deck_def.name) or I18N.text("deck_view.deck", nil, "Deck"), 58, 22)
+    local deck_rule = deck_def and I18N.content_text("deck", deck_def.id, deck_def.description or "") or ""
     love.graphics.setFont(Fonts.fit_block(game, game.FONTS.PIXEL.SMALL, deck_rule, 120, 44))
     love.graphics.setColor(game.C.JOKER_GREY)
     TextCache.printf(deck_rule, 58, 40, 120, "left")
@@ -718,8 +718,8 @@ function DeckViewUI.draw_top(screen, game)
     draw_stake_chip(game, stake_def, 190, 20, 1)
     love.graphics.setFont(game.FONTS.PIXEL.PRICE)
     love.graphics.setColor(game.C.WHITE)
-    TextCache.print(stake_def and stake_def.name or "Stake", 224, 22)
-    local stake_rule = stake_def and stake_def.description or ""
+    TextCache.print(stake_def and I18N.content_name("stake", stake_def.id, stake_def.name) or I18N.text("deck_view.stake", nil, "Stake"), 224, 22)
+    local stake_rule = stake_def and I18N.content_text("stake", stake_def.id, stake_def.description or "") or ""
     love.graphics.setFont(Fonts.fit_block(game, game.FONTS.PIXEL.MICRO, stake_rule, 168, 44))
     love.graphics.setColor(game.C.JOKER_GREY)
     TextCache.printf(stake_rule, 224, 40, 168, "left")
@@ -728,13 +728,13 @@ function DeckViewUI.draw_top(screen, game)
 
     local readout = DeckViewUI.readout(game)
     local t = readout.tallies
-    local tally_text = "Aces " .. t.ace .. "   Faces " .. t.face .. "   Numbered " .. t.numbered
+    local tally_text = string.format(I18N.text("deck_view.tallies", nil, "Aces %s   Faces %s   Numbered %s"), t.ace, t.face, t.numbered)
     love.graphics.setFont(Fonts.fit(game, game.FONTS.PIXEL.SMALL, tally_text, 188))
     love.graphics.setColor(game.C.JOKER_GREY)
     love.graphics.print(tally_text, 8, 224)
 
     love.graphics.setColor(game.C.WHITE)
-    love.graphics.printf(readout.drawable .. " / " .. readout.owned .. " drawable",
+    love.graphics.printf(string.format(I18N.text("deck_view.drawable", nil, "%s / %s drawable"), readout.drawable, readout.owned),
         200, 224, 192, "right")
     love.graphics.setColor(1, 1, 1, 1)
 end
@@ -757,7 +757,7 @@ function DeckViewUI.draw_bottom(game)
     end
 
     game._deck_view_tab_rects = game._deck_view_tab_rects or {}
-    draw_tabs(game, TAB_X, TAB_Y, TAB_W, { "Remaining", "Full Deck" },
+    draw_tabs(game, TAB_X, TAB_Y, TAB_W, { I18N.text("deck_view.remaining", nil, "Remaining"), I18N.text("deck_view.full_deck", nil, "Full Deck") },
         DeckViewUI.mode(game) == "full" and 2 or 1, game._deck_view_tab_rects)
 
     local m = DeckViewUI._chrome_metrics()
@@ -779,8 +779,8 @@ function DeckViewUI.draw_bottom(game)
 
     love.graphics.setFont(game.FONTS.PIXEL.SMALL)
     love.graphics.setColor(game.C.JOKER_GREY)
-    TextCache.print("Tap a card to read it", 8, 205)
-    draw_close_button(game, 206, 216, 108, "Close")
+    TextCache.print(I18N.text("deck_view.tap_hint", nil, "Tap a card to read it"), 8, 205)
+    draw_close_button(game, 206, 216, 108, I18N.text("common.close", nil, "Close"))
     love.graphics.setColor(1, 1, 1, 1)
 end
 

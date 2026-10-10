@@ -22,6 +22,7 @@ local PerformanceLab = require("performance_lab")
 local RenderProfiler = require("render_profiler")
 local Particles = require("particles")
 local Fonts = require("fonts")
+local Localization = require("localization")
 local NumberFormat = require("number_format")
 local Tilt = require("tilt")
 local ScreenWipe = require("screen_wipe")
@@ -2296,9 +2297,10 @@ end
 --- Falls back to the id only for something no catalog names.
 ---@return string
 function Game:discovery_display_name(id)
-    for _, defs in ipairs({ JOKER_DEFS, CONSUMABLE_DEFS, VOUCHER_DEFS, self.P_TAGS, self.P_BLINDS }) do
-        local def = type(defs) == "table" and defs[id]
-        if type(def) == "table" and def.name then return def.name end
+    for _, pair in ipairs({ { "joker", JOKER_DEFS }, { "consumable", CONSUMABLE_DEFS },
+        { "voucher", VOUCHER_DEFS }, { "tag", self.P_TAGS }, { "blind", self.P_BLINDS } }) do
+        local def = type(pair[2]) == "table" and pair[2][id]
+        if type(def) == "table" and def.name then return I18N.content_name(pair[1], id, def.name) end
     end
     for _, entries in pairs(CollectionCatalog.all_entries_by_category() or {}) do
         for _, entry in ipairs(entries) do
@@ -2384,7 +2386,7 @@ function Game:check_voucher_unlocks(data)
         for _, id in ipairs(earned) do
             self._newly_unlocked_vouchers[#self._newly_unlocked_vouchers + 1] = id
             local def = VOUCHER_DEFS and VOUCHER_DEFS[id]
-            Milestones.push(self, "voucher", "Voucher unlocked", (def and def.name) or id)
+            Milestones.push(self, "voucher", "Voucher unlocked", I18N.content_name("voucher", id, (def and def.name) or id))
         end
         if self.SETTINGS then self.SETTINGS.VOUCHER_UNLOCKS = self.voucher_unlocks end
         self:save_settings()
@@ -2559,7 +2561,7 @@ function Game:check_unlock(event_type, data)
     for _, id in ipairs(earned) do
         self._newly_unlocked_jokers[#self._newly_unlocked_jokers + 1] = id
         local def = JOKER_DEFS and JOKER_DEFS[id]
-        Milestones.push(self, "joker", "Joker unlocked", (def and def.name) or id)
+        Milestones.push(self, "joker", "Joker unlocked", I18N.content_name("joker", id, (def and def.name) or id))
     end
     self:save_settings()
     return earned
@@ -3159,6 +3161,7 @@ function Game:activate_pause_focus()
         return self:art_apply()
     elseif t.kind == "skip_tutorial" then
         return self:skip_tutorial()
+
     elseif t.kind == "perf_toggle" and t.rect and t.rect.experiment_id then
         PerformanceLab.toggle(t.rect.experiment_id)
         RenderProfiler.reset()
@@ -3676,6 +3679,8 @@ function Game:default_settings()
         -- Per suit: which collab draws the face cards (absent = the deck's own) and whether
         -- the suit uses the high-contrast sheets (`card_art.lua`).
         CARD_ART = CardArt.default_settings(),
+        -- Display language (`localization.lua`); gameplay never reads it.
+        LANGUAGE = Localization.DEFAULT_LANGUAGE,
         TUTORIAL_COMPLETE = false,
         TUTORIAL_STAGE = 1,
         GRAPHICS = { texture_scaling = 1 },
@@ -3735,6 +3740,7 @@ function Game:normalize_settings(data)
     end
     -- A save from before per-suit art has only the old global contrast switch.
     out.CARD_ART = CardArt.normalize(data.CARD_ART, data.HIGH_CONTRAST_CARDS)
+    if Localization.is_supported(data.LANGUAGE) then out.LANGUAGE = data.LANGUAGE end
     if type(data.TUTORIAL_COMPLETE) == "boolean" then
         out.TUTORIAL_COMPLETE = data.TUTORIAL_COMPLETE
     elseif math.max(0, math.floor(tonumber(data.WINS) or 0)) > 0
@@ -3775,6 +3781,8 @@ function Game:snapshot_settings()
         TILT = self:tilt_enabled(),
         JOKER_DISPLAY = self:joker_display_enabled(),
         CARD_ART = CardArt.normalize(self.SETTINGS and self.SETTINGS.CARD_ART),
+        LANGUAGE = Localization.is_supported(self.SETTINGS and self.SETTINGS.LANGUAGE)
+            and self.SETTINGS.LANGUAGE or Localization.DEFAULT_LANGUAGE,
         TUTORIAL_COMPLETE = self.SETTINGS and self.SETTINGS.TUTORIAL_COMPLETE == true,
         TUTORIAL_STAGE = self.SETTINGS and self.SETTINGS.TUTORIAL_STAGE or 1,
         CONTROLS = InputBindings.normalize_controls(self.SETTINGS and self.SETTINGS.CONTROLS),
@@ -3798,6 +3806,7 @@ end
 function Game:load_settings()
     self.SETTINGS = copy_table(self:default_settings())
     local function finish_load()
+        self:apply_language(self.SETTINGS.LANGUAGE)
         self:apply_unlocks(self.SETTINGS.UNLOCKS)
         self:apply_discovered(self.SETTINGS.DISCOVERED)
         self:apply_joker_wins(self.SETTINGS.JOKER_WINS)
@@ -3832,6 +3841,28 @@ function Game:load_settings()
     end
     self.SETTINGS = self:normalize_settings(data)
     finish_load()
+    return true
+end
+
+--- Put the strings and the fonts on `language` without saving: the half of `set_language` that
+--- loading settings needs too. An unsupported code lands on English.
+---@return string language the language now live
+function Game:apply_language(language)
+    Localization.set_language(language)
+    local live = Localization.get_language()
+    if self.FONTS and self.FONTS.PIXEL then
+        Fonts.apply(self, self.FONTS.PIXEL.PROFILE, live)
+    end
+    return live
+end
+
+--- Switch the display language (the main menu's language picker), and remember it.
+---@return boolean changed
+function Game:set_language(language)
+    if not self.SETTINGS or not Localization.is_supported(language) then return false end
+    if self.SETTINGS.LANGUAGE == language and Localization.get_language() == language then return false end
+    self.SETTINGS.LANGUAGE = self:apply_language(language)
+    self:save_settings()
     return true
 end
 
@@ -5590,9 +5621,11 @@ function Game:get_blind_display_name(index)
     if not def then return "Blind" end
     if def.id == "boss" then
         local proto = self:get_boss_blind_prototype()
-        if proto and proto.name then return proto.name end
+        if proto and proto.name then
+            return I18N.content_name("blind", self.current_boss_blind_id, proto.name)
+        end
     end
-    return def.name or "Blind"
+    return I18N.content_name("blind", "bl_" .. tostring(def.id), def.name or "Blind")
 end
 
 local BLIND_EFFECT_DESCRIPTIONS = {
@@ -5628,13 +5661,13 @@ local BLIND_EFFECT_DESCRIPTIONS = {
 
 function Game:get_blind_effect_text_for_key(blind_key)
     if type(blind_key) ~= "string" then return "" end
-    return BLIND_EFFECT_DESCRIPTIONS[blind_key] or ""
+    return I18N.content_text("blind", blind_key, BLIND_EFFECT_DESCRIPTIONS[blind_key] or "")
 end
 
 function Game:get_blind_prototype_description(blind_key)
     if type(blind_key) ~= "string" then return "" end
     if blind_key == "bl_small" or blind_key == "bl_big" then
-        return "No special effect."
+        return I18N.t("term.no_special_effect")
     end
     return self:get_blind_effect_text_for_key(blind_key)
 end
@@ -5654,7 +5687,7 @@ function Game:get_blind_description(index)
     if not def then return "" end
     if def.id == "boss" then
         if self.boss_runtime and self.boss_runtime.disable_current_boss_ability == true then
-            return "Boss ability disabled this round."
+            return I18N.t("term.boss_disabled")
         end
         local text = self:get_boss_effect_text()
         if text ~= "" then return text end
@@ -5662,11 +5695,11 @@ function Game:get_blind_description(index)
         if proto and proto.debuff_text and proto.debuff_text ~= "" then
             return proto.debuff_text
         end
-        return "Boss blind effect."
+        return I18N.t("term.boss_effect")
     end
     local target = self:get_blind_target(index, self.ante)
     if target and target > 0 then
-        return "Score at least " .. NumberFormat.format(math.floor(target)) .. " chips."
+        return I18N.t("term.score_chips", { score = NumberFormat.format(math.floor(target)) })
     end
     return def.name or "Blind"
 end
@@ -6176,8 +6209,8 @@ function Game:_draw_shop_voucher_tooltip()
     local offer = slot and self.shop_voucher_offers and self.shop_voucher_offers[slot]
     local rect = slot and self._shop_voucher_rects and self._shop_voucher_rects[slot]
     if type(offer) ~= "table" or type(rect) ~= "table" then return end
-    local title = tostring(offer.name or "Voucher")
-    local desc = tostring(offer.description or "")
+    local title = tostring(I18N.content_name("voucher", offer.id, offer.name or "Voucher"))
+    local desc = tostring(I18N.content_text("voucher", offer.id, offer.description or ""))
     local font = (self.FONTS and self.FONTS.PIXEL and self.FONTS.PIXEL.SMALL) or love.graphics.getFont()
     local resolved = TooltipDraw.resolved_lines_from_multiline(desc)
     TooltipDraw.draw_tooltip_layout(font, title, resolved, rect.x, rect.y, rect.w, rect.h)
@@ -7709,8 +7742,10 @@ function Game:get_skip_tag_tooltip(skip_id, blind_index)
     if not type_name then return nil end
     local key = self:tag_key_for_id(skip_id)
     local def = key and self.P_TAGS and self.P_TAGS[key]
-    local name = (def and def.name) or (type_name:sub(1, 1):upper() .. type_name:sub(2) .. " Tag")
-    local description = Tag and Tag.get_description and Tag.get_description(type_name) or ""
+    local name = I18N.content_name("tag", key,
+        (def and def.name) or (type_name:sub(1, 1):upper() .. type_name:sub(2) .. " Tag"))
+    local description = I18N.content_text("tag", key,
+        Tag and Tag.get_description and Tag.get_description(type_name) or "")
     if type_name == "orbital" and blind_index then
         self:ensure_skip_orbital_hand(blind_index)
         local idx = self.skip_tag_orbital_hand and self.skip_tag_orbital_hand[blind_index]
@@ -12084,7 +12119,9 @@ function Game:buy_shop_voucher(slot_index)
         Sfx.play("coin1")
     end
     self:discover_item(offer.id)
-    self._voucher_callout = { name = offer.name or voucher_id, t = 1.6, duration = 1.6 }
+    self._voucher_callout = {
+        name = I18N.content_name("voucher", voucher_id, offer.name or voucher_id), t = 1.6, duration = 1.6,
+    }
     self:emit_joker_event("on_shop_buy", {
         offer = offer,
         offer_kind = "voucher",
@@ -13153,7 +13190,7 @@ function Game:_booster_offer_price(pack, size)
 end
 
 function Game:_booster_offer_display_name(pack, size)
-    return BoosterPackUI.display_label(pack, size) .. " Pack"
+    return BoosterPackUI.pack_name(pack, size)
 end
 
 function Game:roll_shop_boosters()
@@ -16188,6 +16225,7 @@ function Game:handle_pause_settings_touch(x, y)
             self:skip_tutorial()
             return
         end
+
         if self._pause_audio_open_rect and self:_point_in_rect_simple(x, y, self._pause_audio_open_rect) then
             self._pause_settings_tab = "audio"
             self._pause_focus_index = 1

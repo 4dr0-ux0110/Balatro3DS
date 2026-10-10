@@ -290,12 +290,13 @@ function ProfileUI.career_rows(game)
     local C = game.C
     local hand_name, hand_count = game:career_most_played_hand()
     return {
-        { "Best Hand", fmt_num(game:get_career_stat("c_best_hand_chips")), C.RED },
-        { "Highest Round", fmt_num(game:get_career_stat("c_furthest_round")), C.WHITE },
-        { "Highest Ante", fmt_num(game:get_career_stat("c_furthest_ante")), C.ORANGE },
-        { "Most Played", hand_count > 0 and (hand_name .. " (" .. hand_count .. ")") or "None", C.WHITE },
-        { "Most Money", "$" .. fmt_num(game:get_career_stat("c_most_money")), C.MONEY },
-        { "Best Streak", fmt_num(game:get_career_stat("c_win_streak")), C.GREEN },
+        { I18N.text("career.best_hand", nil, "Best Hand"), fmt_num(game:get_career_stat("c_best_hand_chips")), C.RED },
+        { I18N.text("career.highest_round", nil, "Highest Round"), fmt_num(game:get_career_stat("c_furthest_round")), C.WHITE },
+        { I18N.text("career.highest_ante", nil, "Highest Ante"), fmt_num(game:get_career_stat("c_furthest_ante")), C.ORANGE },
+        { I18N.text("career.most_played", nil, "Most Played"), hand_count > 0 and (I18N.hand_name(hand_name) .. " (" .. hand_count .. ")")
+            or I18N.text("common.none", nil, "None"), C.WHITE },
+        { I18N.text("career.most_money", nil, "Most Money"), "$" .. fmt_num(game:get_career_stat("c_most_money")), C.MONEY },
+        { I18N.text("career.best_streak", nil, "Best Streak"), fmt_num(game:get_career_stat("c_win_streak")), C.GREEN },
     }
 end
 
@@ -350,7 +351,7 @@ function ProfileUI.draw_bottom(game)
     if ProfileUI.showing_stats(game, selected, active) then
         love.graphics.setFont(font_s)
         love.graphics.setColor(C.WHITE)
-        love.graphics.print("Career", inner_x, label_y({ y = PANEL.y + PANEL_PAD, h = ROW_H }, font_s))
+        love.graphics.print(I18N.text("profile.career", nil, "Career"), inner_x, label_y({ y = PANEL.y + PANEL_PAD, h = ROW_H }, font_s))
         local row_y = PANEL.y + PANEL_PAD + ROW_H + ROW_GAP
         for _, row in ipairs(ProfileUI.career_rows(game)) do
             love.graphics.setFont(font_s)
@@ -364,7 +365,7 @@ function ProfileUI.draw_bottom(game)
     else
         love.graphics.setFont(font_s)
         love.graphics.setColor(C.WHITE)
-        love.graphics.print("Progress", inner_x, label_y({ y = PANEL.y + PANEL_PAD, h = ROW_H }, font_s))
+        love.graphics.print(I18N.text("profile.progress", nil, "Progress"), inner_x, label_y({ y = PANEL.y + PANEL_PAD, h = ROW_H }, font_s))
         draw_progress_bar(game, bar_x, PANEL.y + PANEL_PAD, bar_w, ROW_H,
             math.floor((progress and progress.overall or 0) * 100 + 0.5), 100, font_s, nil)
 
@@ -382,7 +383,7 @@ function ProfileUI.draw_bottom(game)
     -- Wins
     local wins = progress and progress.wins or 0
     love.graphics.setFont(font_m)
-    local wins_label, wins_value = "Wins: ", tostring(wins)
+    local wins_label, wins_value = I18N.text("profile.wins_prefix", nil, "Wins: "), tostring(wins)
     local wins_w = font_m:getWidth(wins_label) + font_m:getWidth(wins_value)
     local wins_x = COL_X + math.floor((COL_W - wins_w) * 0.5 + 0.5)
     love.graphics.setColor(C.WHITE)
@@ -393,12 +394,12 @@ function ProfileUI.draw_bottom(game)
     -- Slot actions
     local is_active = selected == active
     game._profile_load_rect = { x = COL_X, y = PANEL.y + 30, w = COL_W, h = 26 }
-    draw_button(game._profile_load_rect, is_active and "Loaded" or "Load Profile",
+    draw_button(game._profile_load_rect, is_active and I18N.text("profile.loaded", nil, "Loaded") or I18N.text("profile.load", nil, "Load Profile"),
         is_active and C.GREY or C.BLUE, C, font_s)
 
     game._profile_delete_rect = { x = COL_X, y = PANEL.y + 62, w = COL_W, h = 22 }
     draw_button(game._profile_delete_rect,
-        game._profile_delete_confirm and "Confirm?" or "Delete Profile",
+        game._profile_delete_confirm and I18N.text("menu.confirm_delete", nil, "Confirm?") or I18N.text("profile.delete", nil, "Delete Profile"),
         game._profile_delete_confirm and C.MULT_DARK or C.RED, C, font_s)
 
     -- Panel switch. Career stats are only kept for the profile that is loaded, so the button
@@ -406,7 +407,7 @@ function ProfileUI.draw_bottom(game)
     if selected == active then
         game._profile_stats_rect = { x = COL_X, y = PANEL.y + 90, w = COL_W, h = 22 }
         draw_button(game._profile_stats_rect,
-            game._profile_show_stats and "Progress" or "Career Stats",
+            game._profile_show_stats and I18N.text("profile.progress", nil, "Progress") or I18N.text("profile.career_stats", nil, "Career Stats"),
             game._profile_show_stats and C.BLUE or C.ORANGE, C, font_s)
     else
         game._profile_stats_rect = nil
@@ -417,19 +418,19 @@ function ProfileUI.draw_bottom(game)
         game._profile_unlock_rect = nil
         love.graphics.setFont(font_s)
         love.graphics.setColor(C.GREEN)
-        love.graphics.printf("Unlocked!", COL_X, unlock_y + 4, COL_W, "center")
+        love.graphics.printf(I18N.text("profile.unlocked", nil, "Unlocked!"), COL_X, unlock_y + 4, COL_W, "center")
     else
         game._profile_unlock_rect = { x = COL_X, y = unlock_y, w = COL_W, h = 22 }
-        draw_button(game._profile_unlock_rect, "Unlock All", C.GREEN, C, font_s)
+        draw_button(game._profile_unlock_rect, I18N.text("profile.unlock_all", nil, "Unlock All"), C.GREEN, C, font_s)
     end
 
     game._profile_back_rect = { x = PANEL.x, y = SCREEN_H - 26, w = SCREEN_W - PANEL.x * 2, h = 20 }
-    draw_button(game._profile_back_rect, "Back", C.ORANGE, C, font_s)
+    draw_button(game._profile_back_rect, I18N.text("common.back", nil, "Back"), C.ORANGE, C, font_s)
 
     if game._profile_rename_active then
         love.graphics.setFont(font_t)
         love.graphics.setColor(C.DARK_WHITE or C.LIGHT_GREY)
-        love.graphics.printf("Type a name - Enter to save, Esc to cancel", 0, NAME_RECT.y + NAME_RECT.h + 2, SCREEN_W, "center")
+        love.graphics.printf(I18N.text("profile.rename_hint", nil, "Type a name - Enter to save, Esc to cancel"), 0, NAME_RECT.y + NAME_RECT.h + 2, SCREEN_W, "center")
     end
 
     local targets = ProfileUI.build_focus_targets(game)
@@ -454,9 +455,9 @@ function ProfileUI.draw_stats(game)
 
     love.graphics.setFont(font_m)
     love.graphics.setColor(C.WHITE)
-    love.graphics.printf("Stats", 0, 10, SCREEN_W, "center")
+    love.graphics.printf(I18N.text("menu.entry.stats", nil, "Stats"), 0, 10, SCREEN_W, "center")
 
-    local name = game.get_profile_name and game:get_profile_name() or "Profile"
+    local name = game.get_profile_name and game:get_profile_name() or I18N.text("menu.entry.profile", nil, "Profile")
     love.graphics.setFont(font_s)
     love.graphics.setColor(C.DARK_WHITE or C.GREY)
     love.graphics.printf(name, 0, 28, SCREEN_W, "center")
@@ -479,13 +480,13 @@ function ProfileUI.draw_stats(game)
     local progress = game.get_profile_progress and game:get_profile_progress() or nil
     love.graphics.setFont(font_s)
     love.graphics.setColor(C.DARK_WHITE or C.GREY)
-    love.graphics.print("Wins", inner_x, label_y({ y = row_y, h = ROW_H }, font_s))
+    love.graphics.print(I18N.text("profile.wins", nil, "Wins"), inner_x, label_y({ y = row_y, h = ROW_H }, font_s))
     love.graphics.setColor(C.RED)
     love.graphics.printf(tostring(progress and progress.wins or 0), inner_x,
         label_y({ y = row_y, h = ROW_H }, font_s), inner_w, "right")
 
     game._stats_back_rect = { x = 20, y = SCREEN_H - 30, w = SCREEN_W - 40, h = 24 }
-    draw_button(game._stats_back_rect, "Back", C.MULT, C, font_s)
+    draw_button(game._stats_back_rect, I18N.text("common.back", nil, "Back"), C.MULT, C, font_s)
     love.graphics.setColor(C.WHITE)
     love.graphics.setLineWidth(2)
     love.graphics.rectangle("line", game._stats_back_rect.x + 0.5, game._stats_back_rect.y + 0.5,

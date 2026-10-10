@@ -236,7 +236,7 @@ function RoundWinUI.draw_bottom(game, payout_lines)
     end
     love.graphics.setFont(P.BUTTON_PRICE)
     love.graphics.setColor(game.C.WHITE)
-    local btn_label = string.format("Cash Out: $%d", sum_payout_amounts(payout_lines))
+    local btn_label = string.format(I18N.text("round.cash_out", nil, "Cash Out: $%d"), sum_payout_amounts(payout_lines))
     love.graphics.printf(btn_label, btn.x,
         btn.y + math.floor((btn.h - P.BUTTON_PRICE:getHeight()) * 0.5 + 0.5), btn.w, "center")
     y = y + BTN_H + 6
@@ -247,7 +247,7 @@ function RoundWinUI.draw_bottom(game, payout_lines)
     local text_x = inner_x + 34
     love.graphics.setFont(P.SMALL)
     love.graphics.setColor(game.C.WHITE)
-    love.graphics.print("Score at least", text_x, y + 3)
+    love.graphics.print(I18N.text("hud.score_at_least", nil, "Score at least"), text_x, y + 3)
     love.graphics.setFont(P.MEDIUM)
     love.graphics.setColor(game.C.RED)
     love.graphics.print(NumberFormat.format(math.floor(tonumber(game.current_blind_target) or 0)), text_x, y + 15)

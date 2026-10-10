@@ -563,12 +563,21 @@ local function draw_debuff_x_overlay(draw_x, draw_y, w, h)
 end
 
 local function rank_to_label(rank)
-    if rank == 14 then return "Ace" end
-    if rank == 13 then return "King" end
-    if rank == 12 then return "Queen" end
-    if rank == 11 then return "Jack" end
-    if type(rank) == "number" then return tostring(rank) end
-    return "?"
+    if type(rank) ~= "number" then return "?" end
+    return I18N.rank_name(rank)
+end
+
+--- A modifier's effect lines in the live language (`locales/content/<language>/terms.lua`), the
+--- English lines here otherwise.
+local function translated_lines(kind, id, english)
+    if not id then return english end
+    local value = I18N.content_description(kind, id, english)
+    if type(value) == "string" then
+        local out = {}
+        for line in value:gmatch("[^\n]+") do out[#out + 1] = line end
+        return out
+    end
+    return value
 end
 
 local function card_base_score(rank)
@@ -780,13 +789,21 @@ local function build_tooltip_plan(font, rank, suit, enh, edition, seal,
     local header = new_run()
     if enh == "stone" then
         -- Anonymous title: a stone card has no rank or suit to show.
-        run_add(header, font, "Stone Card", G.C.PANEL)
+        run_add(header, font, I18N.content_name("enhancement", "stone", "Stone Card"), G.C.PANEL)
     else
         local suit_name = tostring(suit or "?")
         local suit_colour = (G.C and G.C.SUITS and G.C.SUITS[suit_name])
             or (G.C and G.C.PANEL) or TOOLTIP_FALLBACK_WHITE
-        run_add(header, font, string.format("%s of ", rank_to_label(rank)), G.C.PANEL)
-        run_add(header, font, suit_name, suit_colour)
+        -- "{rank} of {suit}" in the language's own order, with only the suit in its colour.
+        local template = I18N.text("card.rank_of_suit", nil, "{rank} of {suit}")
+        local before, after = template:match("^(.-){suit}(.*)$")
+        if not before then before, after = template .. " ", "" end
+        local rank_label = rank_to_label(rank)
+        before = before:gsub("{rank}", function() return rank_label end)
+        after = after:gsub("{rank}", function() return rank_label end)
+        if before ~= "" then run_add(header, font, before, G.C.PANEL) end
+        run_add(header, font, I18N.suit_name(suit_name), suit_colour)
+        if after ~= "" then run_add(header, font, after, G.C.PANEL) end
     end
 
     local lines = {}
@@ -802,28 +819,38 @@ local function build_tooltip_plan(font, rank, suit, enh, edition, seal,
     local enh_name_colour = (G.C.SECONDARY_SET and G.C.SECONDARY_SET.Enhanced) or G.C.PURPLE
     local seal_colours = { gold = G.C.GOLD, red = G.C.RED, blue = G.C.BLUE, purple = G.C.PURPLE }
 
+    local function bonus_line(n)
+        local signed = string.format("%+d", n)
+        return I18N.text("card.bonus_chips", { value = signed }, "Bonus " .. signed .. " chips")
+    end
     if enh == "stone" then
-        table.insert(lines, "+50 chips")
+        table.insert(lines, I18N.text("card.base_chips", { value = 50 }, "+50 chips"))
         if bonus_chips ~= 0 then
-            table.insert(lines, string.format("Bonus %+d chips", bonus_chips))
+            table.insert(lines, bonus_line(bonus_chips))
         end
     else
-        table.insert(lines, string.format("+%d chips", card_base_score(rank)))
+        local base = card_base_score(rank)
+        table.insert(lines, I18N.text("card.base_chips", { value = base }, string.format("+%d chips", base)))
         if bonus_chips ~= 0 then
-            table.insert(lines, string.format("Bonus %+d chips", bonus_chips))
+            table.insert(lines, bonus_line(bonus_chips))
         end
         if chip_bonus ~= 0 then
-            table.insert(lines, string.format("%+d chips", chip_bonus))
+            local signed = string.format("%+d", chip_bonus)
+            table.insert(lines, I18N.text("tooltip.chips", { value = signed }, signed .. " chips"))
         end
         if mult_bonus ~= 0 then
-            table.insert(lines, string.format("%+d mult", mult_bonus))
+            local signed = string.format("%+d", mult_bonus)
+            table.insert(lines, I18N.text("tooltip.mult", { value = signed }, signed .. " mult"))
         end
-        add_named_section(ENHANCEMENT_NAMES[enh], enh_name_colour, enhancement_tooltip_lines(enh))
+        add_named_section(enh and I18N.content_name("enhancement", enh, ENHANCEMENT_NAMES[enh]),
+            enh_name_colour, translated_lines("enhancement", enh, enhancement_tooltip_lines(enh)))
     end
     -- Badge order matches the reference's info queue: enhancement, then edition, then seal
     -- (`common_events.lua:2722-2736`).
-    add_named_section(EDITION_NAMES[edition], G.C.DARK_EDITION, edition_tooltip_lines(edition))
-    add_named_section(SEAL_NAMES[seal], seal_colours[seal], seal_tooltip_lines(seal))
+    add_named_section(EDITION_NAMES[edition] and I18N.content_name("edition", edition, EDITION_NAMES[edition]),
+        G.C.DARK_EDITION, translated_lines("edition", edition, edition_tooltip_lines(edition)))
+    add_named_section(SEAL_NAMES[seal] and I18N.content_name("seal", seal, SEAL_NAMES[seal]),
+        seal_colours[seal], translated_lines("seal", seal, seal_tooltip_lines(seal)))
 
     local runs, body_max_w = {}, 0
     for i = 1, #lines do

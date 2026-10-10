@@ -65,18 +65,24 @@ function TicketStrip.challenge_facts(def)
         { "hands", "Hands" }, { "discards", "Discards" }, { "hand_size", "Hand Size" },
         { "joker_slots", "Joker Slots" }, { "dollars", "Starting $" },
     }
-    for _, pair in ipairs(ordered) do
-        if rules[pair[1]] ~= nil then out[#out + 1] = pair[2] .. ": " .. tostring(rules[pair[1]]) end
+    local function fact(key, label, value)
+        return I18N.text("challenge.fact." .. key, nil, label) .. I18N.text("challenge.fact.separator", nil, ": ")
+            .. tostring(value)
     end
-    if #(def.start_jokers or {}) > 0 then out[#out + 1] = "Starting Jokers: " .. #def.start_jokers end
-    if #(def.start_consumables or {}) > 0 then out[#out + 1] = "Starting Consumables: " .. #def.start_consumables end
-    if #(def.start_vouchers or {}) > 0 then out[#out + 1] = "Starting Vouchers: " .. #def.start_vouchers end
+    for _, pair in ipairs(ordered) do
+        if rules[pair[1]] ~= nil then out[#out + 1] = fact(pair[1], pair[2], rules[pair[1]]) end
+    end
+    if #(def.start_jokers or {}) > 0 then out[#out + 1] = fact("start_jokers", "Starting Jokers", #def.start_jokers) end
+    if #(def.start_consumables or {}) > 0 then
+        out[#out + 1] = fact("start_consumables", "Starting Consumables", #def.start_consumables)
+    end
+    if #(def.start_vouchers or {}) > 0 then out[#out + 1] = fact("start_vouchers", "Starting Vouchers", #def.start_vouchers) end
     local banned = count_keys(def.banned and def.banned.cards)
         + count_keys(def.banned and def.banned.packs)
         + count_keys(def.banned and def.banned.tags)
         + count_keys(def.banned and def.banned.blinds)
-    if banned > 0 then out[#out + 1] = "Banned Items: " .. banned end
-    if #out == 0 then out[1] = "Special rules apply" end
+    if banned > 0 then out[#out + 1] = fact("banned", "Banned Items", banned) end
+    if #out == 0 then out[1] = I18N.text("challenge.fact.special", nil, "Special rules apply") end
     return out
 end
 

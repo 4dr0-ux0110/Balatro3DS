@@ -237,6 +237,30 @@ if [[ -f "$font_src" ]]; then
     done
 fi
 
+# --- language font sheets ----------------------------------------------------
+#
+# Each language that m6x11plus cannot draw gets its source font cut down to the characters its
+# strings use, baked per cell height (see LANGUAGE_FONTS in dev/config.sh). Cached by font and
+# character set, so an unchanged translation costs nothing.
+if (( ${#LANGUAGE_FONTS[@]} )); then
+    python3 -c "import fontTools" 2>/dev/null \
+        || die "fontTools is needed to bake language fonts: python3 -m pip install fonttools"
+    for entry in "${LANGUAGE_FONTS[@]}"; do
+        lang="${entry%%:*}"
+        src="${entry#*:}"
+        [[ -f "$STAGE_DIR/locales/$lang.lua" ]] || die "LANGUAGE_FONTS names $lang but locales/$lang.lua is missing"
+        info "baking $lang font sheets"
+        mkdir -p "$STAGE_DIR/resources/fonts/lang"
+        python3 "$DEV_DIR/bake_cjk_font.py" \
+            --font "$REPO_ROOT/$src" \
+            --strings "$STAGE_DIR/locales/$lang.lua" "$STAGE_DIR/locales/content/$lang" \
+            --heights "${CJK_CELL_HEIGHTS[@]}" \
+            --out "$STAGE_DIR/resources/fonts/lang/${lang}_h%d.bcfnt" \
+            --cache "$ASSET_CACHE" \
+            --mkbcfnt "$(command -v mkbcfnt)"
+    done
+fi
+
 pending="$(find "$STAGE_DIR" \( -name '*.png' -o -name '*.ttf' \) | wc -l | tr -d ' ')"
 if (( pending > 0 )); then
     info "converting $pending assets (cached in $ASSET_CACHE)"

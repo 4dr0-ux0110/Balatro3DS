@@ -44,7 +44,12 @@ function RunInfoUI.owned_vouchers(game)
         local def = VOUCHER_DEFS and VOUCHER_DEFS[id]
         if type(def) ~= "table" then return end
         seen[id] = true
-        out[#out + 1] = { id = id, name = def.name or id, description = def.description or "", pos = def.pos, def = def }
+        out[#out + 1] = {
+            id = id,
+            name = I18N.content_name("voucher", id, def.name or id),
+            description = I18N.content_text("voucher", id, def.description or ""),
+            pos = def.pos, def = def,
+        }
     end
     local vs = (game and game.vouchers) or {}
     -- Both shapes are in use: an ordered list, and a set keyed by id.
@@ -64,14 +69,15 @@ function RunInfoUI.held_tag_summary(game)
         if tag and tag.type then
             local key = game.tag_key_for_id and game:tag_key_for_id(tag.id)
             local def = key and game.P_TAGS and game.P_TAGS[key]
-            names[#names + 1] = (def and def.name) or (tag.type:gsub("^%l", string.upper) .. " Tag")
+            names[#names + 1] = I18N.content_name("tag", key,
+                (def and def.name) or (tag.type:gsub("^%l", string.upper) .. " Tag"))
             if not first_description and Tag and Tag.get_description then
-                first_description = Tag.get_description(tag.type)
+                first_description = I18N.content_text("tag", key, Tag.get_description(tag.type))
             end
         end
     end
     if #names == 0 then return nil end
-    local summary = "Held: " .. table.concat(names, ", ")
+    local summary = I18N.text("run_info.held", nil, "Held: ") .. table.concat(names, I18N.text("common.list_separator", nil, ", "))
     if #names == 1 and first_description and first_description ~= "" then
         summary = summary .. " — " .. first_description
     end
@@ -94,7 +100,7 @@ function RunInfoUI.inherited_stake_descriptions(stake_id)
         local order = tonumber(def.order)
         if order and order < current_order and def.id ~= "stake_white"
             and type(def.description) == "string" and def.description ~= "" then
-            out[#out + 1] = def.description
+            out[#out + 1] = I18N.content_text("stake", def.id, def.description)
         end
     end
     -- Nearest stake first: those are the ones the player just stepped up from.
@@ -132,7 +138,7 @@ function RunInfoUI.blinds(game)
         local target = (game.get_blind_target and game:get_blind_target(i, game.ante)) or 0
         out[i] = {
             index = i,
-            name = (game.get_blind_display_name and game:get_blind_display_name(i)) or "Blind",
+            name = (game.get_blind_display_name and game:get_blind_display_name(i)) or I18N.text("hud.blind", nil, "Blind"),
             target = math.floor(tonumber(target) or 0),
             reward = (game.get_blind_reward and game:get_blind_reward(i)) or 0,
             state = RunInfoUI.blind_state(game, i),
@@ -191,7 +197,7 @@ local function draw_back_button(game, x, y, w)
     draw_button_with_shadow(x, y, w, 17, 3, 0, game.C.ORANGE, game.C.BLOCK.SHADOW, 2)
     love.graphics.setColor(game.C.WHITE)
     love.graphics.setFont(game.FONTS.PIXEL.SMALL)
-    TextCache.printf("Back", x, y + 3, w, "center")
+    TextCache.printf(I18N.text("common.back", nil, "Back"), x, y + 3, w, "center")
     if game.draw_button_pip and game.gamepad_focus_visible and game:gamepad_focus_visible() then
         game:draw_button_pip(game:get_button_for_role("cancel"), x + 4, y + 3, 11)
     end
@@ -258,7 +264,7 @@ local function draw_blind_plate(game, b, x, y)
     draw_rounded_rect(x + 4, y + BLIND_H - 22, BLIND_W - 8, 18, 3, 0, "fill")
     love.graphics.setFont(game.FONTS.PIXEL.SMALL)
     love.graphics.setColor(game.C.WHITE)
-    TextCache.printf(b.state, x + 4, y + BLIND_H - 18, BLIND_W - 8, "center")
+    TextCache.printf(I18N.text("run_info.state." .. b.state:lower(), nil, b.state), x + 4, y + BLIND_H - 18, BLIND_W - 8, "center")
 end
 
 function RunInfoUI.draw_top(screen, game)
@@ -267,7 +273,7 @@ function RunInfoUI.draw_top(screen, game)
 
     love.graphics.setFont(game.FONTS.PIXEL.SMALL)
     love.graphics.setColor(game.C.JOKER_GREY)
-    love.graphics.print("Ante " .. tostring(tonumber(game.ante) or 1), 10, 6)
+    love.graphics.print(I18N.text("run_info.ante_prefix", nil, "Ante ") .. tostring(tonumber(game.ante) or 1), 10, 6)
 
     for i, b in ipairs(RunInfoUI.blinds(game)) do
         draw_blind_plate(game, b, BLIND_X0 + (i - 1) * BLIND_STEP, BLIND_Y)
@@ -284,12 +290,12 @@ function RunInfoUI.draw_top(screen, game)
     local vouchers = RunInfoUI.owned_vouchers(game)
     love.graphics.setFont(game.FONTS.PIXEL.SMALL)
     love.graphics.setColor(game.C.JOKER_GREY)
-    love.graphics.print(#vouchers > 0 and ("Vouchers " .. #vouchers) or "Vouchers", 10, 116)
+    love.graphics.print(#vouchers > 0 and (I18N.text("run_info.vouchers_prefix", nil, "Vouchers ") .. #vouchers) or I18N.text("deck_view.vouchers", nil, "Vouchers"), 10, 116)
     if #vouchers == 0 then
         love.graphics.setColor(game.C.BLOCK.BACK)
         draw_rounded_rect(VOUCHER_AREA_X, VOUCHER_Y, VOUCHER_AREA_W, 74, 4, 0, "fill")
         love.graphics.setColor(game.C.GREY)
-        TextCache.printf("None redeemed yet", VOUCHER_AREA_X, VOUCHER_Y + 28, VOUCHER_AREA_W, "center")
+        TextCache.printf(I18N.text("run_info.no_vouchers", nil, "None redeemed yet"), VOUCHER_AREA_X, VOUCHER_Y + 28, VOUCHER_AREA_W, "center")
     else
         local card_w = VOUCHER_CELL_W * VOUCHER_SCALE
         local step, start_x = fanned_step(#vouchers, VOUCHER_AREA_W, card_w, 4)
@@ -320,19 +326,20 @@ function RunInfoUI.draw_top(screen, game)
     local stake_def = STAKE_DEFS_BY_ID and STAKE_DEFS_BY_ID[stake_id]
     love.graphics.setFont(game.FONTS.PIXEL.SMALL)
     love.graphics.setColor(game.C.JOKER_GREY)
-    love.graphics.print("Stake", 270, 116)
+    love.graphics.print(I18N.text("deck_view.stake", nil, "Stake"), 270, 116)
     local stake_pos = tonumber(stake_def and stake_def.pos)
     if stake_pos then
         draw_atlas_cell(game, "chips", stake_pos, 270, VOUCHER_Y, 1.3)
     end
     love.graphics.setColor(game.C.WHITE)
-    love.graphics.printf(stake_def and stake_def.name or "Stake", 314, 132, 80, "left")
+    love.graphics.printf(stake_def and I18N.content_name("stake", stake_def.id, stake_def.name) or I18N.text("deck_view.stake", nil, "Stake"),
+        314, 132, 80, "left")
 
     local text_y = 180
     love.graphics.setFont(game.FONTS.PIXEL.MICRO or game.FONTS.PIXEL.SMALL)
     local line_h = love.graphics.getFont():getHeight()
     love.graphics.setColor(game.C.JOKER_GREY)
-    local rule = stake_def and stake_def.description or ""
+    local rule = stake_def and I18N.content_text("stake", stake_def.id, stake_def.description or "") or ""
     love.graphics.printf(rule, 270, text_y, 122, "left")
     local _, wrapped = love.graphics.getFont():getWrap(rule, 122)
     text_y = text_y + math.max(1, #wrapped) * line_h + 2
@@ -340,7 +347,7 @@ function RunInfoUI.draw_top(screen, game)
     local inherited = RunInfoUI.inherited_stake_descriptions(stake_id)
     if #inherited > 0 and text_y + line_h * 2 <= TOP_H - 2 then
         love.graphics.setColor(game.C.GREY)
-        TextCache.print("Also applied", 270, text_y)
+        TextCache.print(I18N.text("run_info.also_applied", nil, "Also applied"), 270, text_y)
         text_y = text_y + line_h
         love.graphics.setColor(game.C.DARK_WHITE)
         local shown = 0
@@ -354,13 +361,13 @@ function RunInfoUI.draw_top(screen, game)
         end
         if shown < #inherited then
             love.graphics.setColor(game.C.GREY)
-            love.graphics.printf("+" .. (#inherited - shown) .. " more", 270, text_y, 122, "left")
+            love.graphics.printf(string.format(I18N.text("run_info.more", nil, "+%d more"), #inherited - shown), 270, text_y, 122, "left")
         end
     end
 
     love.graphics.setFont(game.FONTS.PIXEL.MICRO or game.FONTS.PIXEL.SMALL)
     love.graphics.setColor(game.C.GREY)
-    TextCache.print("Poker hands are on the touch screen", 10, 222)
+    TextCache.print(I18N.text("run_info.hands_hint", nil, "Poker hands are on the touch screen"), 10, 222)
     love.graphics.setColor(1, 1, 1, 1)
 end
 
@@ -437,7 +444,7 @@ function RunInfoUI.draw_hand_row(game, x, y, w, h, hand)
 
     love.graphics.setFont(base)
     love.graphics.setColor(game.C.WHITE)
-    TextCache.print(hand.name or "", x + 50, ty)
+    TextCache.print(I18N.hand_name(hand.name or ""), x + 50, ty)
 
     love.graphics.setFont(Fonts.fit(game, base, chips_text, 38))
     love.graphics.setColor(game.C.BLUE)
@@ -461,10 +468,10 @@ function RunInfoUI.draw_bottom(game)
 
     love.graphics.setFont(game.FONTS.PIXEL.PRICE)
     love.graphics.setColor(game.C.WHITE)
-    TextCache.print("Poker Hands", LIST_X, 14)
+    TextCache.print(I18N.text("deck_view.poker_hands", nil, "Poker Hands"), LIST_X, 14)
     love.graphics.setFont(game.FONTS.PIXEL.MICRO or game.FONTS.PIXEL.SMALL)
     love.graphics.setColor(game.C.JOKER_GREY)
-    TextCache.printf("played", 220, 17, 84, "right")
+    TextCache.printf(I18N.text("run_info.played", nil, "played"), 220, 17, 84, "right")
 
     local hands = RunInfoUI.visible_hands(game)
     local step, row_h = RunInfoUI.row_metrics(#hands)

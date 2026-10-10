@@ -132,6 +132,11 @@ MainMenuUI.HOW_TO_PLAY_PAGES = {
     },
 }
 
+--- The pages in the live language. A translation supplies the same number of pages.
+function MainMenuUI.how_to_play_pages()
+    return I18N.text("tutorial.pages", nil, MainMenuUI.HOW_TO_PLAY_PAGES)
+end
+
 function MainMenuUI.open_how_to_play(game)
     game._menu_sub_state = "how_to_play"
     game._how_to_play_page = game._how_to_play_page or 1
@@ -257,16 +262,17 @@ function MainMenuUI.draw_top(screen, game)
         if def then
             TicketStrip.draw(game, {
                 x = 18, y = 18, w = 364, h = 54, stub_w = 72,
-                stub = unlocked and (game:is_challenge_completed(def.id) and "DONE" or "READY") or "LOCKED",
-                title = unlocked and def.name or "Challenge Locked",
-                detail = string.format("Ticket %02d / %02d", tonumber(game._challenge_selected) or 1,
+                stub = unlocked and (game:is_challenge_completed(def.id) and I18N.text("challenge.stub.done", nil, "DONE")
+                    or I18N.text("challenge.stub.ready", nil, "READY")) or I18N.text("challenge.stub.locked", nil, "LOCKED"),
+                title = unlocked and I18N.content_name("challenge", def.id, def.name) or I18N.text("challenge.locked_title", nil, "Challenge Locked"),
+                detail = string.format(I18N.text("challenge.ticket", nil, "Ticket %02d / %02d"), tonumber(game._challenge_selected) or 1,
                     #(CHALLENGE_DEFS or {})),
                 stub_color = unlocked and (game:is_challenge_completed(def.id) and game.C.GREEN or game.C.RED)
                     or game.C.UI.BACKGROUND_INACTIVE,
             })
             love.graphics.setFont(game.FONTS.PIXEL.SMALL)
             for i, fact in ipairs(unlocked and TicketStrip.challenge_facts(def) or {
-                "Win White Stake with five different decks to begin.",
+                I18N.text("challenge.unlock_hint", nil, "Win White Stake with five different decks to begin."),
             }) do
                 if i > 6 then break end
                 TicketStrip.draw(game, {
@@ -673,7 +679,7 @@ function MainMenuUI.draw_main(game)
     if page.title then
         love.graphics.setFont(font_m)
         love.graphics.setColor(C.WHITE)
-        love.graphics.printf(page.title, panel_x, y, panel_w, "center")
+        love.graphics.printf(I18N.text("menu.page." .. page_name, nil, page.title), panel_x, y, panel_w, "center")
         y = y + title_h
     end
 
@@ -686,7 +692,7 @@ function MainMenuUI.draw_main(game)
             C[entry.colour] or C.BLUE, C.BLOCK.SHADOW, 2)
         love.graphics.setFont(font_m)
         love.graphics.setColor(C.WHITE)
-        love.graphics.printf(entry.label, rect.x, label_y(rect), rect.w, "center")
+        love.graphics.printf(I18N.text("menu.entry." .. entry.kind, nil, entry.label), rect.x, label_y(rect), rect.w, "center")
         y = y + btn_h + btn_gap
     end
 
@@ -701,7 +707,7 @@ function MainMenuUI.draw_main(game)
             C.MULT, C.BLOCK.SHADOW, 2)
         love.graphics.setFont(font_m)
         love.graphics.setColor(C.WHITE)
-        local profile_name = game.get_profile_name and game:get_profile_name() or "Profile"
+        local profile_name = game.get_profile_name and game:get_profile_name() or I18N.text("menu.entry.profile", nil, "Profile")
         love.graphics.printf(profile_name, foot.x, label_y(foot), foot.w, "center")
     else
         rects[#rects + 1] = { kind = "back", rect = foot }
@@ -709,7 +715,15 @@ function MainMenuUI.draw_main(game)
             C.MULT, C.BLOCK.SHADOW, 2)
         love.graphics.setFont(font_m)
         love.graphics.setColor(C.WHITE)
-        love.graphics.printf("Back", foot.x, label_y(foot), foot.w, "center")
+        love.graphics.printf(I18N.text("common.back", nil, "Back"), foot.x, label_y(foot), foot.w, "center")
+    end
+
+    -- Language: a globe in the corner of the root page, as Fussyzhy's translation has it. A
+    -- picture rather than a word, because the word would be in a language the player may not read.
+    if is_root then
+        local globe = { x = 286, y = 8, w = 26, h = 26 }
+        rects[#rects + 1] = { kind = "language", rect = globe }
+        MainMenuUI.draw_globe(game, globe)
     end
 
     game._main_menu_rects = rects
@@ -718,11 +732,124 @@ function MainMenuUI.draw_main(game)
     focus_idx = math.max(1, math.min(#rects, focus_idx))
     game._menu_focus_index = focus_idx
     local focused = rects[focus_idx]
-    if focused then
+    if focused and not game._language_picker_open then
         local r = focused.rect
         love.graphics.setColor(1, 1, 1, 1)
         love.graphics.setLineWidth(2)
         love.graphics.rectangle("line", r.x + 0.5, r.y + 0.5, r.w - 1, r.h - 1)
+    end
+
+    if game._language_picker_open then MainMenuUI.draw_language_picker(game) end
+end
+
+function MainMenuUI.draw_globe(game, r)
+    local C = game.C
+    if _G.draw_button_with_shadow then
+        draw_button_with_shadow(r.x, r.y, r.w, r.h, 4, 4, C.PANEL, C.BLOCK.SHADOW, 2)
+    else
+        love.graphics.setColor(C.PANEL)
+        love.graphics.rectangle("fill", r.x, r.y, r.w, r.h, 4, 4)
+    end
+    local cx, cy = r.x + r.w / 2, r.y + r.h / 2
+    love.graphics.setColor(C.WHITE)
+    love.graphics.setLineWidth(2)
+    love.graphics.circle("line", cx, cy, 8)
+    love.graphics.line(cx - 8, cy, cx + 8, cy)
+    love.graphics.ellipse("line", cx, cy, 3.5, 8)
+end
+
+--------------------------------------------------------------------------------
+-- Language picker
+--------------------------------------------------------------------------------
+
+function MainMenuUI.open_language_picker(game)
+    game._language_picker_open = true
+    game._language_picker_focus = 1
+    for i, code in ipairs(I18N.available_languages()) do
+        if code == I18N.get_language() then game._language_picker_focus = i end
+    end
+    Sfx.play("paper1")
+end
+
+function MainMenuUI.close_language_picker(game)
+    game._language_picker_open = nil
+    game._language_picker_rects = nil
+end
+
+--- Choose a language. The picker closes either way; picking the live one is just a close.
+function MainMenuUI.pick_language(game, code)
+    MainMenuUI.close_language_picker(game)
+    if game:set_language(code) then
+        Sfx.play_button()
+    else
+        Sfx.play("cancel")
+    end
+end
+
+function MainMenuUI.draw_language_picker(game)
+    local C = game.C
+    local languages = I18N.available_languages()
+    local bw, bh, gap = 190, 28, 8
+    local modal_h = 52 + #languages * (bh + gap) + 8
+    local modal = { x = 42, y = math.floor((240 - modal_h) / 2), w = 236, h = modal_h }
+
+    love.graphics.setColor(0, 0, 0, 0.45)
+    love.graphics.rectangle("fill", 0, 0, 320, 240)
+    if _G.draw_rect_with_shadow then
+        draw_rect_with_shadow(modal.x, modal.y, modal.w, modal.h, 6, 3, C.PANEL, C.BLOCK.SHADOW, 3)
+    end
+    love.graphics.setColor(C.WHITE)
+    love.graphics.setFont(game.FONTS.PIXEL.MEDIUM)
+    love.graphics.printf(I18N.t("settings.language"), modal.x, modal.y + 12, modal.w, "center")
+
+    local live = I18N.get_language()
+    local focus = math.max(1, math.min(#languages, tonumber(game._language_picker_focus) or 1))
+    game._language_picker_focus = focus
+    game._language_picker_rects = {}
+    local font = game.FONTS.PIXEL.SMALL
+    for i, code in ipairs(languages) do
+        local r = { x = modal.x + (modal.w - bw) / 2, y = modal.y + 52 + (i - 1) * (bh + gap),
+            w = bw, h = bh, language = code }
+        game._language_picker_rects[i] = r
+        local colour = code == live and C.GREEN or C.MULT
+        draw_button_with_shadow(r.x, r.y, r.w, r.h, 4, 4, colour, C.BLOCK.SHADOW, 2)
+        love.graphics.setColor(C.WHITE)
+        love.graphics.setFont(font)
+        love.graphics.printf(I18N.language_name(code), r.x,
+            r.y + math.floor((r.h - font:getHeight()) / 2), r.w, "center")
+        if i == focus then
+            love.graphics.setLineWidth(2)
+            love.graphics.rectangle("line", r.x + 0.5, r.y + 0.5, r.w - 1, r.h - 1)
+        end
+    end
+end
+
+--- Touch while the picker is up: a language picks it, anywhere else closes.
+function MainMenuUI.touch_language_picker(game, x, y)
+    for _, r in ipairs(game._language_picker_rects or {}) do
+        if game:_point_in_rect_simple(x, y, r) then
+            MainMenuUI.pick_language(game, r.language)
+            return true
+        end
+    end
+    MainMenuUI.close_language_picker(game)
+    return true
+end
+
+function MainMenuUI.button_language_picker(game, btn)
+    local n = #I18N.available_languages()
+    local focus = tonumber(game._language_picker_focus) or 1
+    if btn == "dpup" or btn == "up" or btn == "dpleft" or btn == "left" then
+        game._language_picker_focus = (focus - 2) % n + 1
+        Sfx.play("highlight1", nil, 0.2)
+    elseif btn == "dpdown" or btn == "down" or btn == "dpright" or btn == "right" then
+        game._language_picker_focus = focus % n + 1
+        Sfx.play("highlight1", nil, 0.2)
+    elseif game.is_menu_activate and game:is_menu_activate(btn) then
+        MainMenuUI.pick_language(game, I18N.available_languages()[focus])
+    elseif game.is_menu_back and game:is_menu_back(btn) then
+        MainMenuUI.close_language_picker(game)
+        Sfx.play("cancel")
     end
 end
 
@@ -787,6 +914,9 @@ function MainMenuUI.activate_menu_entry(game, kind)
     elseif kind == "mods" then
         require("mods_ui").open(game)
         return true
+    elseif kind == "language" then
+        MainMenuUI.open_language_picker(game)
+        return true
     elseif kind == "profile" then
         ProfileUI.open(game)
         return true
@@ -819,7 +949,7 @@ function MainMenuUI.draw_how_to_play(game)
     local font_s = game.FONTS.PIXEL.SMALL
     local font_m = game.FONTS.PIXEL.MEDIUM
     local C = game.C
-    local pages = MainMenuUI.HOW_TO_PLAY_PAGES
+    local pages = MainMenuUI.how_to_play_pages()
     local page_count = #pages
     local page_idx = tonumber(game._how_to_play_page) or 1
     page_idx = math.max(1, math.min(page_count, page_idx))
@@ -839,7 +969,7 @@ function MainMenuUI.draw_how_to_play(game)
 
     love.graphics.setFont(font_m)
     love.graphics.setColor(C.WHITE)
-    love.graphics.printf("How to Play", 0, margin, W, "center")
+    love.graphics.printf(I18N.text("menu.how_to_play", nil, "How to Play"), 0, margin, W, "center")
 
     love.graphics.setColor(C.BLOCK.BACK)
     love.graphics.rectangle("fill", content_x, content_y, content_w, content_h, 6, 6)
@@ -903,11 +1033,11 @@ function MainMenuUI.draw_how_to_play(game)
     draw_button_with_shadow(back_x, back_y, back_w, back_h, 4, 4, C.MULT, C.BLOCK.SHADOW, 2)
     love.graphics.setColor(C.WHITE)
     love.graphics.setFont(font_s)
-    love.graphics.printf("Back", back_x, back_y + 5, back_w, "center")
+    love.graphics.printf(I18N.text("common.back", nil, "Back"), back_x, back_y + 5, back_w, "center")
 
     love.graphics.setFont(font_s)
     love.graphics.setColor(C.GREY)
-    love.graphics.printf("B/X: Back   LEFT/RIGHT: Pages", 0, H - 14, W, "center")
+    love.graphics.printf(I18N.text("tutorial.footer", nil, "B/X: Back   LEFT/RIGHT: Pages"), 0, H - 14, W, "center")
 end
 
 --------------------------------------------------------------------------------
@@ -996,7 +1126,7 @@ function MainMenuUI.draw_deck_carousel_sprite(game, def, x, y, w, h, p, unlocked
     love.graphics.setColor(0.25, 0.25, 0.25, 1)
     love.graphics.rectangle("fill", x, y, w, h, 8, 8)
     love.graphics.setColor(1, 1, 1, 1)
-    love.graphics.printf("Sprite unavailable", x, y + math.floor(h * 0.5) - 6, w, "center")
+    love.graphics.printf(I18N.text("menu.sprite_unavailable", nil, "Sprite unavailable"), x, y + math.floor(h * 0.5) - 6, w, "center")
     return false
 end
 
@@ -1047,7 +1177,7 @@ function MainMenuUI.draw_stake_carousel_sprite(game, def, x, y, w, h, p, unlocke
     love.graphics.setColor(0.25, 0.25, 0.25, 1)
     love.graphics.rectangle("fill", x, y, w, h, 8, 8)
     love.graphics.setColor(1, 1, 1, 1)
-    love.graphics.printf("Sprite unavailable", x, y + math.floor(h * 0.5) - 6, w, "center")
+    love.graphics.printf(I18N.text("menu.sprite_unavailable", nil, "Sprite unavailable"), x, y + math.floor(h * 0.5) - 6, w, "center")
     return false
 end
 
@@ -1119,13 +1249,13 @@ function MainMenuUI.draw_deck_select(game)
     draw_button_with_shadow(selectX, selectY, selectW, selectH, 4, 4, G.C.CHIPS, G.C.BLOCK.SHADOW, 2)
     love.graphics.setFont(font_m)
     love.graphics.setColor(C.WHITE)
-    love.graphics.printf("PLAY", selectX, selectY, selectW, "center")
+    love.graphics.printf(I18N.text("menu.play", nil, "PLAY"), selectX, selectY, selectW, "center")
     local seedX, seedW = selectX + selectW + 8, 80
     local seed = game:normalize_run_seed(game._pending_run_seed)
     draw_button_with_shadow(seedX, selectY, seedW, selectH, 4, 4, C.MULT, C.BLOCK.SHADOW, 2)
     love.graphics.setFont(font_s)
     love.graphics.setColor(C.WHITE)
-    love.graphics.printf(seed and ("Seed " .. seed) or "Set Seed", seedX, selectY + 5, seedW, "center")
+    love.graphics.printf(seed and I18N.text("menu.seed", { seed = seed }, "Seed " .. seed) or I18N.text("menu.set_seed", nil, "Set Seed"), seedX, selectY + 5, seedW, "center")
 
     game._deck_select_rects = {
         prev = { x = prev_x, y = prev_y, w = prev_w, h = prev_h, action = "prev" },
@@ -1153,20 +1283,22 @@ function MainMenuUI.draw_deck_select(game)
 
     love.graphics.setFont(font_m)
     love.graphics.setColor(C.WHITE)
-    if love.graphics.getFont():getWidth(def.name) > infoW then
+    local deck_name = I18N.content_name("deck", def.id, def.name)
+    if love.graphics.getFont():getWidth(deck_name) > infoW then
         love.graphics.setFont(font_s)
-        love.graphics.printf(def.name, infoX, infoY + 6, infoW, "center")
+        love.graphics.printf(deck_name, infoX, infoY + 6, infoW, "center")
     else
-        love.graphics.printf(def.name, infoX, infoY, infoW, "center")
+        love.graphics.printf(deck_name, infoX, infoY, infoW, "center")
     end
     love.graphics.setFont(font_m)
-    local offset = love.graphics.getFont():getHeight(def.name)
+    local offset = love.graphics.getFont():getHeight(deck_name)
     love.graphics.rectangle("fill", infoX + padding, infoY + padding + offset, infoW - 2*padding, infoH - 2*padding - offset, 4, 4)
     
     love.graphics.setFont(font_s)
     love.graphics.setColor(C.PANEL)
     love.graphics.printf(
-        deck_unlocked and (def.description or "") or def.unlock_condition and def.unlock_condition.text or "Complete the unlock condition to play this deck.",
+        deck_unlocked and I18N.content_text("deck", def.id, def.description or "")
+            or def.unlock_condition and def.unlock_condition.text or I18N.t("menu.complete_unlock"),
         infoX + 2*padding, infoY + 2*padding + offset, infoW - 4*padding, "center"
     )
 
@@ -1252,11 +1384,12 @@ function MainMenuUI.draw_deck_select(game)
 
     love.graphics.setFont(font_m)
     love.graphics.setColor(stake_unlocked and C.WHITE or C.GREY)
-    if love.graphics.getFont():getWidth(stake_def.name) > stake_info_w then
+    local stake_name = I18N.content_name("stake", stake_def.id, stake_def.name)
+    if love.graphics.getFont():getWidth(stake_name) > stake_info_w then
         love.graphics.setFont(font_s)
-        love.graphics.printf(stake_def.name, stake_info_x, stake_info_y + 6, stake_info_w, "center")
+        love.graphics.printf(stake_name, stake_info_x, stake_info_y + 6, stake_info_w, "center")
     else
-        love.graphics.printf(stake_def.name, stake_info_x, stake_info_y, stake_info_w, "center")
+        love.graphics.printf(stake_name, stake_info_x, stake_info_y, stake_info_w, "center")
     end
     love.graphics.setFont(font_m)
     local stake_name_h = love.graphics.getFont():getHeight()
@@ -1266,7 +1399,8 @@ function MainMenuUI.draw_deck_select(game)
     love.graphics.setFont(font_s)
     love.graphics.setColor(C.PANEL)
     love.graphics.printf(
-        stake_unlocked and (stake_def.description or "") or "Clear the previous stake first.",
+        stake_unlocked and I18N.content_text("stake", stake_def.id, stake_def.description or "")
+            or I18N.t("menu.clear_previous_stake"),
         stake_info_x + 2 * padding, stake_info_y + padding + stake_name_h, stake_info_w - 4 * padding, "center"
     )
 
@@ -1284,7 +1418,7 @@ function MainMenuUI.draw_deck_select(game)
 
     love.graphics.setFont(font_s)
     love.graphics.setColor(C.GREY)
-    love.graphics.printf("A/Y: Play  START: Seed  LEFT/RIGHT: Deck  B/X: Back", 0, H - 14, W, "center")
+    love.graphics.printf(I18N.text("menu.deck_controls", nil, "A/Y: Play  START: Seed  LEFT/RIGHT: Deck  B/X: Back"), 0, H - 14, W, "center")
 end
 
 --- The benchmark screen: a progress readout while the suite runs, then paged results.
@@ -1474,6 +1608,7 @@ function MainMenuUI.handle_touch(game, x, y)
 end
 
 function MainMenuUI._touch_main(game, x, y)
+    if game._language_picker_open then return MainMenuUI.touch_language_picker(game, x, y) end
     for i, target in ipairs(MainMenuUI.build_main_menu_focus_targets(game)) do
         if game:_point_in_rect_simple(x, y, target.rect) then
             game._menu_focus_index = i
@@ -1485,7 +1620,7 @@ end
 
 function MainMenuUI._touch_how_to_play(game, x, y)
     local rects = game._how_to_play_rects or {}
-    local page_count = #(MainMenuUI.HOW_TO_PLAY_PAGES or {})
+    local page_count = #MainMenuUI.how_to_play_pages()
     local page_idx = tonumber(game._how_to_play_page) or 1
 
     if rects.prev and page_idx > 1 and game:_point_in_rect_simple(x, y, rects.prev) then
@@ -1617,11 +1752,11 @@ function MainMenuUI.draw_challenges(game)
     love.graphics.rectangle("fill", 0, 0, W, H)
     love.graphics.setFont(game.FONTS.PIXEL.MEDIUM)
     love.graphics.setColor(C.WHITE)
-    love.graphics.printf("Challenges", 0, 8, W, "center")
+    love.graphics.printf(I18N.text("menu.entry.challenges", nil, "Challenges"), 0, 8, W, "center")
     love.graphics.setFont(game.FONTS.PIXEL.SMALL)
     local completed = 0
     for _, d in ipairs(defs) do if game:is_challenge_completed(d.id) then completed = completed + 1 end end
-    love.graphics.printf(string.format("%d/%d complete  Page %d/%d", completed, #defs, page, pages), 0, 26, W, "center")
+    love.graphics.printf(string.format(I18N.text("challenge.progress", nil, "%d/%d complete  Page %d/%d"), completed, #defs, page, pages), 0, 26, W, "center")
     local panel = { x = 20, y = 44, w = 280, h = 150 }
     love.graphics.setColor(C.BLOCK.BACK)
     love.graphics.rectangle("fill", panel.x, panel.y, panel.w, panel.h, 6, 6)
@@ -1638,7 +1773,7 @@ function MainMenuUI.draw_challenges(game)
         love.graphics.setColor(chosen and C.RED or C.PANEL)
         love.graphics.rectangle("fill", r.x, r.y, r.w, r.h, 3, 3)
         love.graphics.setColor(unlocked and C.WHITE or C.UI.TEXT_INACTIVE)
-        love.graphics.printf(unlocked and d.name or "Locked", r.x + 6, r.y + 2, r.w - 28, "left")
+        love.graphics.printf(unlocked and I18N.content_name("challenge", d.id, d.name) or I18N.text("common.locked", nil, "Locked"), r.x + 6, r.y + 2, r.w - 28, "left")
         if game:is_challenge_completed(d.id) then
             love.graphics.setColor(C.GREEN)
             love.graphics.printf("X", r.x + r.w - 18, r.y + 2, 12, "center")
@@ -1650,10 +1785,10 @@ function MainMenuUI.draw_challenges(game)
     end
     button(game._challenge_rects.prev, "<", C.MULT)
     button(game._challenge_rects.next, ">", C.MULT)
-    button(game._challenge_rects.back, "Back", C.MULT)
+    button(game._challenge_rects.back, I18N.text("common.back", nil, "Back"), C.MULT)
     local selected_def = defs[selected]
     local can_play = selected_def and game:is_challenge_unlocked(selected_def.id)
-    button(game._challenge_rects.play, can_play and "Play" or "Locked",
+    button(game._challenge_rects.play, can_play and I18N.text("menu.entry.play", nil, "Play") or I18N.text("common.locked", nil, "Locked"),
         can_play and C.GREEN or C.UI.BACKGROUND_INACTIVE)
 end
 
@@ -1686,7 +1821,7 @@ function MainMenuUI._button_challenges(game, btn)
 end
 
 function MainMenuUI._button_how_to_play(game, btn)
-    local page_count = #(MainMenuUI.HOW_TO_PLAY_PAGES or {})
+    local page_count = #MainMenuUI.how_to_play_pages()
     local page_idx = tonumber(game._how_to_play_page) or 1
 
     if btn == "dpleft" or btn == "left" then
@@ -1706,6 +1841,10 @@ function MainMenuUI._button_how_to_play(game, btn)
 end
 
 function MainMenuUI._button_main(game, btn)
+    if game._language_picker_open then
+        MainMenuUI.button_language_picker(game, btn)
+        return
+    end
     if btn == "dpup" or btn == "up" then
         MainMenuUI.main_menu_focus_move(game, -1)
         return

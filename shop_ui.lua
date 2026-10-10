@@ -498,7 +498,7 @@ local function selected_shop_action(game)
                     key = "offer:" .. i,
                     node = node,
                     slot = i,
-                    label = "BUY",
+                    label = I18N.text("action.buy", nil, "BUY"),
                     color = game.C.MONEY,
                     enabled = game:can_buy_shop_offer(i),
                     activate = function() return game:buy_shop_joker(i) end,
@@ -517,7 +517,7 @@ local function selected_shop_action(game)
                     key = "voucher:" .. i,
                     node = node,
                     slot = i,
-                    label = "REDEEM",
+                    label = I18N.text("action.redeem", nil, "REDEEM"),
                     color = game.C.GREEN,
                     enabled = enabled,
                     activate = function() return game:buy_shop_voucher(i) end,
@@ -533,7 +533,7 @@ local function selected_shop_action(game)
                     key = "booster:" .. i,
                     node = node,
                     slot = i,
-                    label = "OPEN",
+                    label = I18N.text("action.open", nil, "OPEN"),
                     color = game.C.GREEN,
                     enabled = game:can_afford_price(game:get_shop_booster_price(offer)),
                     activate = function() return game:buy_shop_booster(i) end,
@@ -595,7 +595,7 @@ function ShopUI.draw_shop_item_actions(game)
             x = use_rect.x, y = use_rect.y, w = use_rect.w, h = use_rect.h,
             color = can_use and game.C.RED or game.C.GREY,
             button = game:get_button_for_role("play"),
-            parts = { { text = "BUY+USE", font = game.FONTS.PIXEL.SMALL } },
+            parts = { { text = I18N.text("action.buy_use", nil, "BUY+USE"), font = game.FONTS.PIXEL.SMALL } },
         })
     end
 end
@@ -637,6 +637,8 @@ function ShopUI.draw_bottom_shop(game)
 
     local padding = 4
     local cache = game._shop_ui_cache
+    -- The button labels are shaped into the cache, so a language change rebuilds it.
+    if cache and cache.language ~= I18N.get_language() then cache = nil end
     if not cache then
         cache = {
             continue = {
@@ -644,20 +646,21 @@ function ShopUI.draw_bottom_shop(game)
                 -- Leaving the shop is a held Cancel gesture (`main.lua:547-550`),
                 -- not a one-press action, so it deliberately has no pip.
                 parts = {
-                    { text = "Next", font = game.FONTS.PIXEL.BUTTON },
-                    { text = "Round", font = game.FONTS.PIXEL.BUTTON },
+                    { text = I18N.text("shop.next_round_1", nil, "Next"), font = game.FONTS.PIXEL.BUTTON },
+                    { text = I18N.text("shop.next_round_2", nil, "Round"), font = game.FONTS.PIXEL.BUTTON },
                 },
             },
             reroll = {
                 x = 0, y = 0, w = 74, h = 45,
                 button = game:get_button_for_role("discard"),
                 parts = {
-                    { text = "Reroll", font = game.FONTS.PIXEL.BUTTON },
+                    { text = I18N.text("shop.reroll_label", nil, "Reroll"), font = game.FONTS.PIXEL.BUTTON },
                     { text = "", font = game.FONTS.PIXEL.BUTTON_PRICE },
                 },
             },
             joker_panel = {}, booster_panel = {}, voucher_panel = {},
             continue_hit = {}, reroll_hit = {},
+            language = I18N.get_language(),
         }
         game._shop_ui_cache = cache
     end
@@ -729,7 +732,7 @@ function ShopUI.draw_bottom_shop(game)
         game._shop_layout_dirty = nil
     end
 
-    ShopUI.draw_panel_header(game, "VOUCHER", panel_x - 1, voucherPanel.y, voucherPanel.h)
+    ShopUI.draw_panel_header(game, I18N.text("shop.voucher", nil, "VOUCHER"), panel_x - 1, voucherPanel.y, voucherPanel.h)
 end
 
 --- A shop panel's spine label, set sideways up the left edge of its panel.

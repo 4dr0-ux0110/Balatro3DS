@@ -9,20 +9,20 @@ function TutorialUI.step(game)
     if not game or not game.SETTINGS or game.SETTINGS.TUTORIAL_COMPLETE == true then return nil end
     local stage = math.max(1, math.floor(tonumber(game.SETTINGS.TUTORIAL_STAGE) or 1))
     if stage == 1 then
-        return { code = "01", title = "Your goal is to earn Chips to defeat the enemy Blind.",
-            detail = "Select the Small Blind to start the round!", color = game.C.BLUE }
+        return { code = "01", title = I18N.text("tutorial.step1.title", nil, "Your goal is to earn Chips to defeat the enemy Blind."),
+            detail = I18N.text("tutorial.step1.detail", nil, "Select the Small Blind to start the round!"), color = game.C.BLUE }
     elseif stage == 2 then
-        return { code = "02", title = "You earn Chips by playing Poker hands.",
-            detail = "Tap up to 5 cards, then press Play Hand.", color = game.C.RED }
+        return { code = "02", title = I18N.text("tutorial.step2.title", nil, "You earn Chips by playing Poker hands."),
+            detail = I18N.text("tutorial.step2.detail", nil, "Tap up to 5 cards, then press Play Hand."), color = game.C.RED }
     elseif stage == 3 then
-        return { code = "03", title = "Buy new cards from the Shop.",
-            detail = "Jokers change the run; Vouchers passively upgrade it.", color = game.C.MONEY }
+        return { code = "03", title = I18N.text("tutorial.step3.title", nil, "Buy new cards from the Shop."),
+            detail = I18N.text("tutorial.step3.detail", nil, "Jokers change the run; Vouchers passively upgrade it."), color = game.C.MONEY }
     elseif stage == 4 then
-        return { code = "04", title = "The Big Blind is worth more money.",
-            detail = "Select it when your deck is ready.", color = game.C.ORANGE }
+        return { code = "04", title = I18N.text("tutorial.step4.title", nil, "The Big Blind is worth more money."),
+            detail = I18N.text("tutorial.step4.detail", nil, "Select it when your deck is ready."), color = game.C.ORANGE }
     elseif stage == 5 then
-        return { code = "05", title = "Build another scoring hand.",
-            detail = "Use what you bought, then beat the Big Blind.", color = game.C.RED }
+        return { code = "05", title = I18N.text("tutorial.step5.title", nil, "Build another scoring hand."),
+            detail = I18N.text("tutorial.step5.detail", nil, "Use what you bought, then beat the Big Blind."), color = game.C.RED }
     end
     return nil
 end
@@ -63,7 +63,7 @@ function TutorialUI.draw_top(game)
     local step = TutorialUI.step(game)
     if not step then return false end
     TicketStrip.draw(game, { x = 18, y = 174, w = 364, h = 54, stub_w = 68,
-        stub = "JIMBO " .. step.code, title = step.title, detail = step.detail,
+        stub = I18N.text("tutorial.stub", nil, "JIMBO ") .. step.code, title = step.title, detail = step.detail,
         stub_color = step.color })
     return true
 end

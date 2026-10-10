@@ -127,6 +127,12 @@ function BoosterPackUI.display_label(pack, size)
     return prefix and (prefix .. pn) or pn
 end
 
+--- The pack's full name in the live language: "Mega Buffoon Pack".
+function BoosterPackUI.pack_name(pack, size)
+    return I18N.text("booster.name." .. tostring(pack) .. "_" .. tostring(size or "normal"), nil,
+        BoosterPackUI.display_label(pack, size) .. " Pack")
+end
+
 --- Shop tooltip body (Balatro-style): "Choose X of Y Type Cards …".
 function BoosterPackUI.shop_tooltip_description(offer)
     if type(offer) ~= "table" then return "" end
@@ -140,32 +146,39 @@ function BoosterPackUI.shop_tooltip_description(offer)
         picks = BoosterPackUI.picks_for_size(offer.size)
     end
 
-    local kind_label
-    local tail
+    local kind_label, kind_key
+    local tail, tail_key
     if pack == "standard" then
-        kind_label = "Playing"
-        tail = "to add to your Deck."
+        kind_label, kind_key = "Playing", "playing"
+        tail, tail_key = "to add to your Deck.", "deck"
     elseif pack == "arcana" then
-        kind_label = "Tarot"
-        tail = "to be used immediately."
+        kind_label, kind_key = "Tarot", "tarot"
+        tail, tail_key = "to be used immediately.", "use"
     elseif pack == "celestial" then
-        kind_label = "Planet"
-        tail = "to be used immediately."
+        kind_label, kind_key = "Planet", "planet"
+        tail, tail_key = "to be used immediately.", "use"
     elseif pack == "spectral" then
-        kind_label = "Spectral"
-        tail = "to be used immediately."
+        kind_label, kind_key = "Spectral", "spectral"
+        tail, tail_key = "to be used immediately.", "use"
     elseif pack == "buffoon" then
-        kind_label = "Joker"
-        tail = "to add to your Jokers."
+        kind_label, kind_key = "Joker", "joker"
+        tail, tail_key = "to add to your Jokers.", "jokers"
     else
-        kind_label = "Cards"
-        tail = "to be used immediately."
+        kind_label, kind_key = "Cards", "cards"
+        tail, tail_key = "to be used immediately.", "use"
     end
 
+    local english
     if picks == 2 then
-        return string.format("Choose up to %d of %d %s Cards %s", picks, n, kind_label, tail)
+        english = string.format("Choose up to %d of %d %s Cards %s", picks, n, kind_label, tail)
+    else
+        english = string.format("Choose %d of %d %s Cards %s", picks, n, kind_label, tail)
     end
-    return string.format("Choose %d of %d %s Cards %s", picks, n, kind_label, tail)
+    if I18N.get_language() == I18N.DEFAULT_LANGUAGE then return english end
+    return I18N.t(picks == 2 and "booster.choose_up_to" or "booster.choose", {
+        picks = picks, count = n,
+        kind = I18N.t("booster.card_kind." .. kind_key), tail = I18N.t("booster.tail." .. tail_key),
+    }, english)
 end
 
 function BoosterPackUI.pack_needs_hand(pack)
@@ -350,17 +363,17 @@ function BoosterPackUI.draw_bottom(game)
     love.graphics.rectangle("line", math.floor(width/2) - math.floor(info_w/2), height - info_h, info_w, info_h + 10, 2, 2)
     love.graphics.setFont(game.FONTS.PIXEL.MEDIUM)
     love.graphics.setColor(game.C.WHITE)
-    local title = sess.title or "Pack"
+    local title = sess.title or I18N.text("booster.pack", nil, "Pack")
     local pr = tonumber(sess.picks_remaining) or 0
     love.graphics.printf(title, math.floor(width/2) - math.floor(info_w/2), info_y + 6, info_w, "center")
     love.graphics.setFont(game.FONTS.PIXEL.SMALL)
-    love.graphics.printf("Picks left: " .. tostring(pr), math.floor(width/2) - math.floor(info_w/2), info_y + 32, info_w, "center")
+    love.graphics.printf(I18N.text("booster.picks_left_prefix", nil, "Picks left: ") .. tostring(pr), math.floor(width/2) - math.floor(info_w/2), info_y + 32, info_w, "center")
 
     local skip_w = 60
     local skip_h = info_h - 4
     local skip_x = width - padding - skip_w
     local skip_y = info_y + 8
-    local skip_rect = { x = skip_x, y = skip_y, w = skip_w, h = skip_h, color = game.C.RED, text = "Skip", lines = 1 }
+    local skip_rect = { x = skip_x, y = skip_y, w = skip_w, h = skip_h, color = game.C.RED, text = I18N.text("common.skip", nil, "Skip"), lines = 1 }
     BoosterPackUI._draw_small_button(game, skip_rect)
     game._booster_skip_rect = { x = skip_x, y = skip_y, w = skip_w, h = skip_h }
 

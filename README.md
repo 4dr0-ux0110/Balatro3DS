@@ -36,7 +36,7 @@ A few things are deliberately turned down or off on an original 3DS, which has a
 
 The game loads mods written in the [Steamodded](https://github.com/Steamodded/smods) style: a folder with a `.json` manifest and a Lua file that calls `SMODS.Joker { ... }` and friends. Mods can add Jokers, Tarots, Planets, Spectrals, Vouchers, and sets of face-card art for **Options → Art**.
 
-To install a mod, copy its folder into the `mods` folder the game creates next to its save files on the SD card, then restart. **Options → Mods** lists what loaded, and why anything didn't.
+To install a mod, copy its folder into the `mods` folder the game creates next to its save files on the SD card (`/3ds/save/Balatro3DS/sdmc/mods`), then restart. **Options → Mods** lists what loaded, and why anything didn't.
 
 A saved run remembers which mods it was played with. If those mods change, Continue shows what to install or remove; the run itself is kept.
 

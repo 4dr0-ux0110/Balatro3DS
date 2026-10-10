@@ -384,6 +384,19 @@ local function static_tooltip_lines(def)
     return out
 end
 
+--- The description lines in the live language: a translation (`locales/content/<language>/
+--- consumables.lua`) when there is one, the catalog's English otherwise.
+local function description_lines(def)
+    if def.id and I18N.has("consumable." .. def.id .. ".description") then
+        local out = {}
+        for _, l in ipairs(I18N.content_lines("consumable", def.id)) do
+            if l ~= "" then out[#out + 1] = l end
+        end
+        return out
+    end
+    return static_tooltip_lines(def)
+end
+
 --- Planet: hand level text. Tarot: optional `def.tooltip` string or list of strings.
 ---@return string[]
 function Consumable:get_tooltip_body_lines()
@@ -395,11 +408,11 @@ function Consumable:get_tooltip_body_lines()
         if type(lines) == "table" and #lines > 0 then return lines end
     end
     if def.id == "tarot_fool" and G then
-        local out = static_tooltip_lines(def)
+        local out = description_lines(def)
         local last_id = G.last_consumable_use_id
         if last_id and CONSUMABLE_DEFS and CONSUMABLE_DEFS[last_id] then
-            local name = CONSUMABLE_DEFS[last_id].name or last_id
-            out[#out + 1] = "Currently: " .. tostring(name)
+            local name = I18N.content_name("consumable", last_id, CONSUMABLE_DEFS[last_id].name or last_id)
+            out[#out + 1] = I18N.t("term.fool_current", { name = name })
         end
         if #out > 0 then return out end
     end
@@ -408,8 +421,8 @@ function Consumable:get_tooltip_body_lines()
     -- `functions/common_events.lua:2687-2696`); without it the card is the one consumable whose
     -- worth the player cannot read off the card.
     if def.id == "tarot_temperance" and G and G.temperance_payout then
-        local out = static_tooltip_lines(def)
-        out[#out + 1] = string.format("(Currently $%d)", G:temperance_payout())
+        local out = description_lines(def)
+        out[#out + 1] = I18N.t("term.current_money", { value = G:temperance_payout() })
         if #out > 0 then return out end
     end
     if def.kind == "planet" and type(def.hand) == "string" and def.hand ~= "" then
@@ -424,13 +437,17 @@ function Consumable:get_tooltip_body_lines()
         local stats = idx and G and G.hand_stats and G.hand_stats[idx] or nil
         if stats then
             return {
-                string.format("(lvl.%d) Level up", math.max(1, math.floor(tonumber(stats.level) or 1))),
-                def.hand,
-                string.format("+%d mult and", math.floor(tonumber(stats.mult_per_level) or 0)),
-                string.format("+%d chips", math.floor(tonumber(stats.chips_per_level) or 0)),
+                I18N.t("planet.level_up", { level = math.max(1, math.floor(tonumber(stats.level) or 1)) }),
+                I18N.hand_name(def.hand),
+                I18N.t("planet.mult", { value = math.floor(tonumber(stats.mult_per_level) or 0) }),
+                I18N.t("planet.chips", { value = math.floor(tonumber(stats.chips_per_level) or 0) }),
             }
         end
-        return { string.format("Increases the value of %s", def.hand) }
+        return { I18N.t("term.planet_upgrade", { hand = I18N.hand_name(def.hand) }) }
+    end
+    if (def.kind == "tarot" or def.kind == "spectral") and def.id
+        and I18N.has("consumable." .. def.id .. ".description") then
+        return description_lines(def)
     end
     if def.kind == "tarot" or def.kind == "spectral" then
         local tip = def.tooltip
@@ -485,9 +502,9 @@ function Consumable:draw_tooltip(draw_x, draw_y)
     if #lines == 0 then return end
 
     local def = self.def or {}
-    local title = self.name or def.name or "Consumable"
+    local title = I18N.content_name("consumable", def.id, self.name or def.name or "Consumable")
     if G and G.is_discovered and def.id and not G:is_discovered(def.id) then
-        title = "Not Discovered"
+        title = I18N.t("term.not_discovered")
     end
     local font = G.FONTS.PIXEL.SMALL or love.graphics.getFont()
 

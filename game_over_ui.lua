@@ -13,7 +13,7 @@ local LOSS_QUIPS = {
 function GameOverUI.quip(game)
     local index = ((math.floor(tonumber(game.round) or 0) + math.floor(tonumber(game.ante) or 0))
         % #LOSS_QUIPS) + 1
-    return LOSS_QUIPS[index]
+    return I18N.text("game_over.quip." .. index, nil, LOSS_QUIPS[index])
 end
 local SUMMARY_VALUES = {}
 
@@ -57,6 +57,13 @@ function GameOverUI.begin_title_pop()
     DynaText.pop_in(GAME_OVER_TITLE_TEXT)
 end
 
+--- "  3 new unlocks", or nothing. Shared with the win screen.
+function GameOverUI.new_unlocks_text(count)
+    if count <= 0 then return "" end
+    if count == 1 then return I18N.text("run.new_unlock_one", nil, "  1 new unlock") end
+    return string.format(I18N.text("run.new_unlocks", nil, "  %d new unlocks"), count)
+end
+
 function GameOverUI.draw_top(game)
     local summary = GameOverUI.populate_summary(game, SUMMARY_VALUES)
     local panel_x, panel_y, panel_w, panel_h = 8, 7, 384, 226
@@ -70,9 +77,8 @@ function GameOverUI.draw_top(game)
     local new_count = #(game._newly_unlocked_jokers or {}) + #(game._newly_unlocked_vouchers or {})
     TicketStrip.draw(game, {
         x = panel_x + 8, y = panel_y + 8, w = panel_w - 16, h = 36, stub_w = 72,
-        stub = "ENDED", title = "Game Over",
-        detail = GameOverUI.quip(game)
-            .. (new_count > 0 and string.format("  %d new unlock%s", new_count, new_count == 1 and "" or "s") or ""),
+        stub = I18N.text("game_over.stub", nil, "ENDED"), title = I18N.text("game_over.title", nil, "Game Over"),
+        detail = GameOverUI.quip(game) .. GameOverUI.new_unlocks_text(new_count),
         stub_color = game.C.MULT or game.C.ORANGE,
     })
 
@@ -85,16 +91,16 @@ function GameOverUI.draw_top(game)
         y = y + 19
     end
 
-    row("Best Hand", NumberFormat.format(summary.best_hand_score)
-        .. (game._run_record_flags and game._run_record_flags.c_best_hand_chips and "  NEW" or ""), game.C.RED)
-    row("Most Played Hand", summary.most_played_hand, game.C.WHITE)
-    row("Cards Played", summary.cards_played, game.C.BLUE)
-    row("Cards Discarded", summary.cards_discarded, game.C.RED)
-    row("Cards Purchased", summary.cards_purchased, game.C.MONEY)
-    row("Times Rerolled", summary.times_rerolled, game.C.GREEN)
-    row("New Discoveries", summary.new_discoveries, game.C.ORANGE)
-    row("Defeated By", summary.defeated_by, game.C.ORANGE)
-    row("Seed", summary.seed, game.C.WHITE)
+    row(I18N.text("win.best_hand", nil, "Best Hand"), NumberFormat.format(summary.best_hand_score)
+        .. (game._run_record_flags and game._run_record_flags.c_best_hand_chips and I18N.text("run.new_record", nil, "  NEW") or ""), game.C.RED)
+    row(I18N.text("win.most_played_hand", nil, "Most Played Hand"), I18N.hand_name(summary.most_played_hand), game.C.WHITE)
+    row(I18N.text("win.cards_played", nil, "Cards Played"), summary.cards_played, game.C.BLUE)
+    row(I18N.text("win.cards_discarded", nil, "Cards Discarded"), summary.cards_discarded, game.C.RED)
+    row(I18N.text("win.cards_purchased", nil, "Cards Purchased"), summary.cards_purchased, game.C.MONEY)
+    row(I18N.text("win.times_rerolled", nil, "Times Rerolled"), summary.times_rerolled, game.C.GREEN)
+    row(I18N.text("win.new_discoveries", nil, "New Discoveries"), summary.new_discoveries, game.C.ORANGE)
+    row(I18N.text("game_over.defeated_by", nil, "Defeated By"), summary.defeated_by, game.C.ORANGE)
+    row(I18N.text("win.seed", nil, "Seed"), summary.seed, game.C.WHITE)
 end
 
 function GameOverUI.draw_bottom(game)
@@ -105,7 +111,7 @@ function GameOverUI.draw_bottom(game)
     if game.get_game_over_slide_dy then
         love.graphics.translate(0, game:get_game_over_slide_dy())
     end
-    local blind_label = game._game_over_blind_label or "Blind"
+    local blind_label = game._game_over_blind_label or I18N.text("hud.blind", nil, "Blind")
     local final_score = tonumber(game._game_over_score) or tonumber(game.round_score) or 0
     local target = tonumber(game._game_over_target) or tonumber(game.current_blind_target) or 0
     local ante = tonumber(game._game_over_ante) or tonumber(game.ante) or 1
@@ -123,25 +129,25 @@ function GameOverUI.draw_bottom(game)
 
     love.graphics.setColor(game.C.MULT or game.C.ORANGE)
     love.graphics.setFont(game.FONTS.PIXEL.MEDIUM)
-    love.graphics.print("Game Over", panel_x + 8, panel_y + 6)
+    love.graphics.print(I18N.text("game_over.title", nil, "Game Over"), panel_x + 8, panel_y + 6)
 
     love.graphics.setColor(game.C.WHITE)
     love.graphics.setFont(game.FONTS.PIXEL.SMALL)
     love.graphics.print(blind_label, panel_x + 8, panel_y + 30)
 
     love.graphics.setColor(game.C.GREY)
-    love.graphics.print("Score " .. NumberFormat.format(math.floor(final_score))
+    love.graphics.print(I18N.text("game_over.score_prefix", nil, "Score ") .. NumberFormat.format(math.floor(final_score))
         .. " / " .. NumberFormat.format(math.floor(target)), panel_x + 8, panel_y + 44)
-    love.graphics.print(string.format("Ante %d  ·  Round %d", ante, round_n), panel_x + 8, panel_y + 58)
+    love.graphics.print(string.format(I18N.text("game_over.ante_round", nil, "Ante %d  ·  Round %d"), ante, round_n), panel_x + 8, panel_y + 58)
 
     love.graphics.setColor(game.C.WHITE)
-    love.graphics.printf("You ran out of hands before beating this blind.", panel_x + 8, panel_y + 78, panel_w - 16, "left")
+    love.graphics.printf(I18N.text("game_over.reason", nil, "You ran out of hands before beating this blind."), panel_x + 8, panel_y + 78, panel_w - 16, "left")
 
     game._game_over_continue_rect = { x = panel_x + panel_w - 84, y = panel_y + panel_h - 26, w = 74, h = 18 }
     TicketStrip.draw(game, {
         x = game._game_over_continue_rect.x, y = game._game_over_continue_rect.y,
         w = game._game_over_continue_rect.w, h = game._game_over_continue_rect.h,
-        stub_w = 24, stub = "A", title = "Continue", stub_color = game.C.ORANGE,
+        stub_w = 24, stub = "A", title = I18N.text("common.continue", nil, "Continue"), stub_color = game.C.ORANGE,
     })
     love.graphics.pop()
 end

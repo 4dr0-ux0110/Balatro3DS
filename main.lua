@@ -18,6 +18,8 @@ Loading.step(0)
 -- Read before the game is built, applied in love.load once graphics exists.
 local PerfFlags = require "perf_flags"
 
+-- Display-text lookup, global so every screen reaches it the same way (`localization.lua`).
+I18N = require "localization"
 require "engine.object"
 require "engine.node"
 require "engine.moveable"

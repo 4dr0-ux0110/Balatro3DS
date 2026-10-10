@@ -397,6 +397,30 @@ local function colour_for_modifiers(spec)
     return nil
 end
 
+--- Steamodded's language codes are the game's, except English.
+local STEAMODDED_CODE = { en = "en-us" }
+
+--- `loc_txt` for one language. A mod may write `loc_txt = { name, text }` (one language), or one
+--- table per language as Steamodded allows: `loc_txt = { ["en-us"] = {...}, zh_CN = {...} }`.
+local function loc_for(loc, language)
+    if type(loc) ~= "table" then return nil end
+    if loc.name ~= nil or loc.text ~= nil then return loc end
+    return loc[STEAMODDED_CODE[language] or language] or loc[language] or loc["en-us"] or loc.default
+end
+SMODS.loc_for = loc_for
+
+--- The languages a per-language `loc_txt` names, other than English.
+local function other_languages(loc)
+    local out = {}
+    if type(loc) ~= "table" or loc.name ~= nil or loc.text ~= nil then return out end
+    for code, entry in pairs(loc) do
+        if type(entry) == "table" and code ~= "en-us" and code ~= "en" and code ~= "default" then
+            out[#out + 1] = code
+        end
+    end
+    return out
+end
+
 --- One tooltip line from one `loc_txt.text` entry: `#n#` filled from `vars`, then split into
 --- coloured segments.
 function SMODS.format_line(text, vars)
@@ -420,7 +444,7 @@ end
 
 local function tooltip_lines_for(center)
     return function(joker)
-        local loc = center.loc_txt or {}
+        local loc = loc_for(center.loc_txt, I18N and I18N.get_language() or "en") or {}
         local text = loc.text
         if type(text) == "string" then text = { text } end
         if type(text) ~= "table" then return nil end
@@ -474,7 +498,7 @@ function SMODS.Joker(t)
     local negative = t.negative_sprite ~= nil
         and register_sprite(mod, t.negative_sprite, "Joker", t.key, "negative_sprite") or nil
 
-    local loc = type(t.loc_txt) == "table" and t.loc_txt or {}
+    local loc = loc_for(t.loc_txt, "en") or {}
     next_order = next_order + 1
     local def = {
         id = id,
@@ -503,6 +527,7 @@ function SMODS.Joker(t)
 
     JOKER_DEFS[id] = def
     SMODS.Centers[id] = t
+    SMODS.register_translations(mod, "joker", id, t)
     JokerEffects.register(id, build_effect(t, def))
     mod.registered.jokers[#mod.registered.jokers + 1] = id
     return t
@@ -530,8 +555,8 @@ end
 
 --- `loc_txt.text` as plain lines with `#n#` filled in and the markup dropped, for the places
 --- that show a single plain string (the shop's voucher callout, the collection).
-local function plain_text(center, card)
-    local loc = type(center.loc_txt) == "table" and center.loc_txt or {}
+local function plain_text(center, card, language)
+    local loc = loc_for(center.loc_txt, language or "en") or {}
     local text = loc.text
     if type(text) == "string" then text = { text } end
     if type(text) ~= "table" then return "" end
@@ -550,6 +575,27 @@ local function plain_text(center, card)
     return table.concat(lines, "\n")
 end
 SMODS.plain_text = plain_text
+
+--- A mod's own translations: each language in a per-language `loc_txt` gets the card's name
+--- (and, for vouchers, whose description is shown as one plain string, the description) in the
+--- game's string tables, so the collection, the shop and the toasts find it like any other.
+--- Tooltip text is read from `loc_txt` in the live language when drawn (`tooltip_lines_for`).
+function SMODS.register_translations(mod, kind, id, center, voucher_config)
+    if not (I18N and I18N.add_strings) then return end
+    for _, code in ipairs(other_languages(center.loc_txt)) do
+        local entry = center.loc_txt[code]
+        local strings, keys = {}, {}
+        if entry.name ~= nil then
+            strings[kind .. "." .. id .. ".name"] = tostring(entry.name)
+        end
+        if voucher_config then
+            strings[kind .. "." .. id .. ".description"] = plain_text(center, { ability = deep_copy(voucher_config) }, code)
+        end
+        for key in pairs(strings) do keys[#keys + 1] = key end
+        I18N.add_strings(code, strings)
+        mod.registered.strings[#mod.registered.strings + 1] = { language = code, keys = keys }
+    end
+end
 
 --- The tooltip lines for any mod centre, given the object standing in for `card`.
 function SMODS.tooltip_lines(id, card)
@@ -615,7 +661,7 @@ function SMODS.Consumable(t)
         check(type(config.hand_type) == "string", "Consumable '" .. t.key .. "': hand_type must be a string")
     end
 
-    local loc = type(t.loc_txt) == "table" and t.loc_txt or {}
+    local loc = loc_for(t.loc_txt, "en") or {}
     consumable_order = consumable_order + 1
     -- Data only: an owned consumable is a copy of this table and is saved with the run, so
     -- nothing here may be a function. The code is found again through `SMODS.Centers[id]`.
@@ -637,6 +683,7 @@ function SMODS.Consumable(t)
     t.key = id
     t.consumable_kind = kind
     SMODS.Centers[id] = t
+    SMODS.register_translations(mod, "consumable", id, t)
     mod.registered.consumables[#mod.registered.consumables + 1] = id
     return t
 end
@@ -731,7 +778,7 @@ function SMODS.Voucher(t)
         requires[#requires + 1] = full
     end
 
-    local loc = type(t.loc_txt) == "table" and t.loc_txt or {}
+    local loc = loc_for(t.loc_txt, "en") or {}
     voucher_order = voucher_order + 1
     t.mod = mod
     t.original_key = t.key
@@ -751,6 +798,7 @@ function SMODS.Voucher(t)
         mod_sprite = sprite,
     }
     SMODS.Centers[id] = t
+    SMODS.register_translations(mod, "voucher", id, t, config)
     mod.registered.vouchers[#mod.registered.vouchers + 1] = id
     return t
 end
@@ -968,6 +1016,10 @@ function SMODS.rollback(mod)
         if VOUCHER_DEFS then VOUCHER_DEFS[id] = nil end
         SMODS.Centers[id] = nil
     end
+    for _, set in ipairs(mod.registered.strings or {}) do
+        if I18N and I18N.remove_strings then I18N.remove_strings(set.language, set.keys) end
+    end
+    mod.registered.strings = {}
     for _, skin in ipairs(mod.registered.deck_skins or {}) do CardArt.unregister(skin.suit, skin.id) end
     mod.registered.deck_skins = {}
     for _, key in ipairs(mod.registered.sprites or {}) do SMODS.Sprites[key] = nil end

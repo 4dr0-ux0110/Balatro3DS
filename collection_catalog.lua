@@ -166,7 +166,7 @@ function CollectionCatalog.build_joker_entries()
                 id = id,
                 category = "jokers",
                 node_kind = "joker",
-                name = def.name or id,
+                name = I18N.content_name("joker", id, def.name or id),
                 order = tonumber(def.order) or 9999,
                 def = def,
                 discovery_id = id,
@@ -185,7 +185,7 @@ function CollectionCatalog.build_consumable_entries(kind)
                 id = id,
                 category = kind == "tarot" and "tarots" or (kind == "planet" and "planets" or "spectrals"),
                 node_kind = "consumable",
-                name = def.name or id,
+                name = I18N.content_name("consumable", id, def.name or id),
                 order = tonumber(def.index) or 9999,
                 def = def,
                 discovery_id = id,
@@ -206,7 +206,7 @@ function CollectionCatalog.build_deck_entries()
                 id = def.id,
                 category = "decks",
                 node_kind = "deck",
-                name = def.name or def.id,
+                name = I18N.content_name("deck", def.id, def.name or def.id),
                 order = tonumber(def.order) or 9999,
                 def = def,
                 pos = def.pos,
@@ -225,12 +225,12 @@ function CollectionCatalog.build_voucher_entries()
                 id = id,
                 category = "vouchers",
                 node_kind = "voucher",
-                name = def.name or id,
+                name = I18N.content_name("voucher", id, def.name or id),
                 -- Mod vouchers carry an explicit order; vanilla ones sort by sheet position.
                 order = tonumber(def.order) or tonumber(def.pos) or 9999,
                 def = def,
                 discovery_id = id,
-                description = def.description,
+                description = I18N.content_text("voucher", id, def.description),
             }
         end
     end
@@ -245,7 +245,7 @@ function CollectionCatalog.build_enhanced_entries()
             id = "enhancement_" .. key,
             category = "enhanced",
             node_kind = "enhanced",
-            name = CollectionCatalog.ENHANCEMENT_NAMES[key] or key,
+            name = I18N.content_name("enhancement", key, CollectionCatalog.ENHANCEMENT_NAMES[key] or key),
             order = i,
             enhancement = key,
             discovery_id = "enhancement_" .. key,
@@ -261,7 +261,7 @@ function CollectionCatalog.build_seal_entries()
             id = "seal_" .. key,
             category = "seals",
             node_kind = "seal",
-            name = CollectionCatalog.SEAL_NAMES[key] or key,
+            name = I18N.content_name("seal", key, CollectionCatalog.SEAL_NAMES[key] or key),
             order = i,
             seal = key,
             discovery_id = "seal_" .. key,
@@ -277,7 +277,7 @@ function CollectionCatalog.build_edition_entries()
             id = "edition_" .. key,
             category = "editions",
             node_kind = "edition",
-            name = CollectionCatalog.EDITION_NAMES[key] or key,
+            name = I18N.content_name("edition", key, CollectionCatalog.EDITION_NAMES[key] or key),
             order = i,
             edition = key,
             discovery_id = "edition_" .. key,
@@ -308,7 +308,7 @@ function CollectionCatalog.build_booster_entries()
                         id = id,
                         category = "boosters",
                         node_kind = "booster",
-                        name = label .. " Pack",
+                        name = BoosterPackUI and BoosterPackUI.pack_name(pack, size) or (label .. " Pack"),
                         order = order,
                         pack = pack,
                         size = size,
@@ -331,7 +331,7 @@ end
 function CollectionCatalog.deck_tooltip_body(game, def)
     if type(def) ~= "table" then return "" end
     if game and game.is_deck_unlocked and game:is_deck_unlocked(def.id) then
-        return def.description or ""
+        return I18N.content_text("deck", def.id, def.description or "")
     end
     local uc = def.unlock_condition
     if type(uc) == "table" and type(uc.text) == "string" then
@@ -340,12 +340,23 @@ function CollectionCatalog.deck_tooltip_body(game, def)
     return "Complete the unlock condition to play this deck."
 end
 
+--- A description as lines: the translation's when there is one, otherwise the English lines.
+function CollectionCatalog.translated_lines(kind, id, english)
+    local value = I18N.content_description(kind, id, english)
+    if type(value) == "string" then
+        local out = {}
+        for line in value:gmatch("[^\n]+") do out[#out + 1] = line end
+        return out
+    end
+    return value
+end
+
 ---@return string title
 ---@return string[] body_lines
 function CollectionCatalog.entry_tooltip_content(game, entry)
-    if not entry then return "Not Discovered", {} end
+    if not entry then return I18N.t("term.not_discovered"), {} end
     if not CollectionCatalog.is_entry_discovered(game, entry) then
-        return "Not Discovered", {}
+        return I18N.t("term.not_discovered"), {}
     end
 
     local kind = entry.node_kind
@@ -363,11 +374,11 @@ function CollectionCatalog.entry_tooltip_content(game, entry)
         end
         return title, { desc }
     elseif kind == "enhanced" then
-        return entry.name or "Enhanced Card",
-            CollectionCatalog.ENHANCEMENT_TOOLTIPS[entry.enhancement] or {}
+        return entry.name or "Enhanced Card", CollectionCatalog.translated_lines("enhancement",
+            entry.enhancement, CollectionCatalog.ENHANCEMENT_TOOLTIPS[entry.enhancement] or {})
     elseif kind == "seal" then
-        return entry.name or "Seal",
-            CollectionCatalog.SEAL_TOOLTIPS[entry.seal] or {}
+        return entry.name or "Seal", CollectionCatalog.translated_lines("seal",
+            entry.seal, CollectionCatalog.SEAL_TOOLTIPS[entry.seal] or {})
     elseif kind == "tag" then
         local body = entry.description or ""
         if body == "" and entry.tag_def then
@@ -380,7 +391,7 @@ function CollectionCatalog.entry_tooltip_content(game, entry)
         if game and game.get_blind_prototype_description then
             desc = game:get_blind_prototype_description(key) or ""
         end
-        if desc == "" then desc = "No special effect." end
+        if desc == "" then desc = I18N.t("term.no_special_effect") end
         return entry.name or "Blind", { desc }
     end
 
@@ -406,12 +417,13 @@ function CollectionCatalog.build_tag_entries()
                     id = key,
                     category = "tags",
                     node_kind = "tag",
-                    name = def.name or key,
+                    name = I18N.content_name("tag", key, def.name or key),
                     order = tonumber(def.order) or 9999,
                     tag_type = tag_type,
                     tag_def = def,
                     discovery_id = key,
-                    description = Tag and Tag.DESCRIPTIONS and Tag.DESCRIPTIONS[tag_type],
+                    description = I18N.content_text("tag", key,
+                        Tag and Tag.DESCRIPTIONS and Tag.DESCRIPTIONS[tag_type]),
                 }
             end
         end
@@ -429,7 +441,7 @@ function CollectionCatalog.build_blind_entries()
                 id = key,
                 category = "blinds",
                 node_kind = "blind",
-                name = def.name or key,
+                name = I18N.content_name("blind", key, def.name or key),
                 order = tonumber(def.order) or 9999,
                 blind_def = def,
                 blind_key = key,

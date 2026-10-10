@@ -771,4 +771,49 @@ suite.test("the Mods page draws loaded and failed mods", function()
     wipe_mods()
 end)
 
+suite.test("mod loc_txt can carry one table per language", function()
+    wipe_mods()
+    write_mod("Loc", { id = "Loc", prefix = "loc", main_file = "main.lua", version = "1" }, [==[
+SMODS.Joker {
+    key = "plus",
+    loc_txt = {
+        ["en-us"] = { name = "Plus", text = { "{C:mult}+#1#{} Mult" } },
+        zh_CN = { name = "加号", text = { "{C:mult}+#1#{}倍率" } },
+    },
+    config = { extra = { mult = 4 } }, rarity = 1, cost = 2, sprite = "plus.png",
+    loc_vars = function(self, info_queue, card) return { vars = { card.ability.extra.mult } } end,
+}
+SMODS.Voucher {
+    key = "big",
+    loc_txt = { ["en-us"] = { name = "Big", text = { "+#1# hand size" } }, zh_CN = { name = "大", text = { "手牌上限+#1#" } } },
+    config = { extra = 1 }, cost = 10, sprite = "big.png",
+    loc_vars = function(self, info_queue, card) return { vars = { card.ability.extra } } end,
+}
+]==])
+    ModLoader.load_all()
+    T.assert_eq(ModLoader.by_id.Loc.status, "loaded", tostring(ModLoader.by_id.Loc.error))
+    T.assert_eq(JOKER_DEFS.j_loc_plus.name, "Plus", "the English name is the definition's")
+    T.assert_eq(VOUCHER_DEFS.v_loc_big.description, "+1 hand size")
+
+    local function flat(v, out)
+        out = out or {}
+        if type(v) == "string" then out[#out + 1] = v
+        elseif type(v) == "table" then for _, x in pairs(v) do flat(x, out) end end
+        return out
+    end
+    local card = { ability = { extra = { mult = 4 } } }
+    T.assert_true(table.concat(flat(SMODS.tooltip_lines("j_loc_plus", card))):find("Mult", 1, true) ~= nil)
+
+    I18N.set_language("zh_CN")
+    T.assert_eq(I18N.content_name("joker", "j_loc_plus", "Plus"), "加号")
+    T.assert_eq(I18N.content_name("voucher", "v_loc_big", "Big"), "大")
+    T.assert_eq(I18N.t("voucher.v_loc_big.description"), "手牌上限+1")
+    T.assert_true(table.concat(flat(SMODS.tooltip_lines("j_loc_plus", card))):find("倍率", 1, true) ~= nil,
+        "the tooltip follows the live language")
+
+    wipe_mods()
+    T.assert_false(I18N.has("joker.j_loc_plus.name"), "unloading a mod takes its strings with it")
+    I18N.set_language("en")
+end)
+
 return suite

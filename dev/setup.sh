@@ -98,6 +98,12 @@ command -v ninja >/dev/null 2>&1 || HOST_TOOLS+=(ninja)
 command -v ffmpeg >/dev/null 2>&1 || HOST_TOOLS+=(ffmpeg)
 command -v oggenc >/dev/null 2>&1 || HOST_TOOLS+=(vorbis-tools)
 
+# Language font sheets are cut down with fontTools (dev/bake_cjk_font.py).
+if ! python3 -c "import fontTools" >/dev/null 2>&1; then
+    info "installing fontTools"
+    python3 -m pip install --user fonttools || die "could not install fontTools (python3 -m pip install fonttools)"
+fi
+
 if (( ${#HOST_TOOLS[@]} )); then
     if command -v brew >/dev/null 2>&1; then
         info "installing host build tools: ${HOST_TOOLS[*]}"

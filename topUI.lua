@@ -131,12 +131,13 @@ function TopUI:cached_label(key, value, prefix, suffix)
         self._label_cache = cache
     end
     local entry = cache[key]
-    if entry and entry.value == value then return entry.text end
+    -- The prefix is compared too: it is translated text, and changes with the language.
+    if entry and entry.value == value and entry.prefix == prefix and entry.suffix == suffix then return entry.text end
     local text = (prefix or "") .. tostring(value) .. (suffix or "")
     if entry then
-        entry.value, entry.text = value, text
+        entry.value, entry.text, entry.prefix, entry.suffix = value, text, prefix, suffix
     else
-        cache[key] = { value = value, text = text }
+        cache[key] = { value = value, text = text, prefix = prefix, suffix = suffix }
     end
     return text
 end
@@ -285,7 +286,7 @@ function TopUI:draw(screen)
     if G.STATE == G.STATES.SELECTING_HAND or G.STATE == G.STATES.ROUND_EVAL or G.STATE == G.STATES.GAME_OVER then
         blind_index = G.current_blind_index or blind_index
     end
-    local blind_name = (G.get_blind_display_name and G:get_blind_display_name(blind_index)) or ((blind_def and blind_def.name) or (G.current_blind_name or "Blind"))
+    local blind_name = (G.get_blind_display_name and G:get_blind_display_name(blind_index)) or ((blind_def and blind_def.name) or (G.current_blind_name or I18N.text("hud.blind", nil, "Blind")))
     
     local blind_target = tonumber(G.current_blind_target) or 0
     if G.STATE == G.STATES.BLIND_SELECT and G.get_blind_target then
@@ -332,12 +333,12 @@ function TopUI:draw(screen)
     
     
     if is_blind_select then
-        TopUI.center_text_static("Choose blind", ix - sysDepth * textHeight, iy -2, iw, ih)
+        TopUI.center_text_static(I18N.text("blind.choose", nil, "Choose blind"), ix - sysDepth * textHeight, iy -2, iw, ih)
 
     elseif G.STATE == G.STATES.ROUND_EVAL then
         love.graphics.setColor(G.C.WHITE)
         love.graphics.setFont(G.FONTS.PIXEL.MEDIUM)
-        TopUI.center_text_static("Round won!", ix - sysDepth * textHeight, iy - 6, iw, math.floor(ih * 0.55))
+        TopUI.center_text_static(I18N.text("round.won", nil, "Round won!"), ix - sysDepth * textHeight, iy - 6, iw, math.floor(ih * 0.55))
         local bi = G.current_blind_index or 1
         G:draw_blind_chip_anim(bi, ix + math.floor(iw / 2) - sysDepth * signHeight, iy + math.floor(ih * 0.72), 1.05)
 
@@ -357,11 +358,11 @@ function TopUI:draw(screen)
         love.graphics.setColor(G.C.WHITE)
         love.graphics.setFont(G.FONTS.PIXEL.MEDIUM)
         local sess = G.booster_session
-        local t1 = (sess and sess.title) or "Booster Pack"
+        local t1 = (sess and sess.title) or I18N.text("booster.title", nil, "Booster Pack")
         TopUI.center_text(t1, ix, iy - 4, iw, math.floor(ih * 0.45))
         love.graphics.setFont(G.FONTS.PIXEL.MEDIUM)
         local pr = sess and tonumber(sess.picks_remaining) or 0
-        TopUI.center_text(self:cached_label("picks", pr, "Picks left: "), ix - sysDepth * textHeight, iy + math.floor(ih * 0.6), iw, math.floor(ih * 0.35))
+        TopUI.center_text(self:cached_label("picks", pr, I18N.text("booster.picks_left_prefix", nil, "Picks left: ")), ix - sysDepth * textHeight, iy + math.floor(ih * 0.6), iw, math.floor(ih * 0.35))
 
     else
         -- Score Requirements Box
@@ -371,7 +372,7 @@ function TopUI:draw(screen)
         if is_boss_blind then
             love.graphics.setFont(G.FONTS.PIXEL.MICRO or G.FONTS.PIXEL.SMALL)
             love.graphics.setColor(G.C.RED)
-            DynaText.draw(self.boss_indicator_text, "BOSS", blind_name_x + 2, iy + 3, 24, "left")
+            DynaText.draw(self.boss_indicator_text, I18N.text("hud.boss", nil, "BOSS"), blind_name_x + 2, iy + 3, 24, "left")
             blind_name_x = blind_name_x + 22
             blind_name_w = blind_name_w - 22
             love.graphics.setFont(G.FONTS.PIXEL.MEDIUM)
@@ -414,7 +415,7 @@ function TopUI:draw(screen)
             TextCache.printf(effect, score_box_ix + 34 - sysDepth * textHeight, score_box_iy + 2, score_box_iw - 36, "left")
             love.graphics.setFont(G.FONTS.PIXEL.SMALL)
             love.graphics.setColor(G.C.WHITE)
-            TextCache.print("Score", score_box_ix + 34 - sysDepth * textHeight, score_box_iy + score_box_ih - 21)
+            TextCache.print(I18N.text("hud.score", nil, "Score"), score_box_ix + 34 - sysDepth * textHeight, score_box_iy + score_box_ih - 21)
             local bossReq = NumberFormat.format(math.floor(blind_target))
             love.graphics.setFont(Fonts.fit(G, G.FONTS.PIXEL.MEDIUM, bossReq, score_box_iw - 36))
             love.graphics.setColor(G.C.RED)
@@ -424,7 +425,7 @@ function TopUI:draw(screen)
         else
             love.graphics.setColor(G.C.WHITE)
             love.graphics.setFont(G.FONTS.PIXEL.SMALL)
-            TextCache.print("Score at least", ix - sysDepth * textHeight, iy - 2)
+            TextCache.print(I18N.text("hud.score_at_least", nil, "Score at least"), ix - sysDepth * textHeight, iy - 2)
 
             love.graphics.setColor(G.C.RED)
             local scoreReq = NumberFormat.format(math.floor(blind_target))
@@ -434,7 +435,7 @@ function TopUI:draw(screen)
 
             love.graphics.setColor(G.C.WHITE)
             love.graphics.setFont(G.FONTS.PIXEL.SMALL)
-            local rewardText = "Reward: "
+            local rewardText = I18N.text("hud.reward", nil, "Reward: ")
             local rewardY = iy + math.floor(G.FONTS.PIXEL.SMALL_HEIGHT/2) + 6 + G.FONTS.PIXEL.MEDIUM_HEIGHT
             TextCache.print(rewardText, ix - sysDepth * textHeight, rewardY)
             love.graphics.setColor(G.C.MONEY)
@@ -451,8 +452,8 @@ function TopUI:draw(screen)
     
     love.graphics.setFont(G.FONTS.PIXEL.SMALL)
     love.graphics.setColor(G.C.WHITE)
-    TextCache.print("Round", ix, iy - 3)
-    TextCache.print("Score", ix, iy + 7)
+    TextCache.print(I18N.text("hud.round_score_1", nil, "Round"), ix, iy - 3)
+    TextCache.print(I18N.text("hud.round_score_2", nil, "Score"), ix, iy + 7)
 
     love.graphics.setColor(G.C.PANEL)
     local paneOffset = 30
@@ -493,6 +494,9 @@ function TopUI:draw(screen)
     end
     if handHidden then
         handSelected = "???"
+    elseif handSelected ~= "" then
+        -- `handSelected` is the internal hand name; only what is drawn is translated.
+        handSelected = I18N.hand_name(handSelected)
     end
     if(love.graphics.getFont():getWidth(handSelected) > (iw - 20)) then
         love.graphics.setFont(G.FONTS.PIXEL.SMALL)
@@ -601,11 +605,11 @@ function TopUI:draw(screen)
     local fieldHeight = 43
     local padding = 4
     local field_juice = self.field_juice or {}
-    TopUI.LabeledField("Hands", G.hands, fieldsPositionX, fieldsPositionY, fieldWidth, fieldHeight, G.C.BLUE, field_juice.hands)
-    TopUI.LabeledField("Discards", G.discards, fieldsPositionX + fieldWidth + padding, fieldsPositionY, fieldWidth, fieldHeight, G.C.RED, field_juice.discards)
+    TopUI.LabeledField(I18N.text("hud.hands", nil, "Hands"), G.hands, fieldsPositionX, fieldsPositionY, fieldWidth, fieldHeight, G.C.BLUE, field_juice.hands)
+    TopUI.LabeledField(I18N.text("hud.discards", nil, "Discards"), G.discards, fieldsPositionX + fieldWidth + padding, fieldsPositionY, fieldWidth, fieldHeight, G.C.RED, field_juice.discards)
     local ante_label = self:ante_readout()
-    TopUI.LabeledField("Ante", ante_label, fieldsPositionX + (fieldWidth + padding) * 2, fieldsPositionY, fieldWidth, fieldHeight, G.C.ORANGE, field_juice.ante)
-    TopUI.LabeledField("Round", G.round, fieldsPositionX + (fieldWidth + padding) * 2, fieldsPositionY + fieldHeight + padding, fieldWidth, fieldHeight, G.C.RED, field_juice.round)
+    TopUI.LabeledField(I18N.text("hud.ante", nil, "Ante"), ante_label, fieldsPositionX + (fieldWidth + padding) * 2, fieldsPositionY, fieldWidth, fieldHeight, G.C.ORANGE, field_juice.ante)
+    TopUI.LabeledField(I18N.text("hud.round", nil, "Round"), G.round, fieldsPositionX + (fieldWidth + padding) * 2, fieldsPositionY + fieldHeight + padding, fieldWidth, fieldHeight, G.C.RED, field_juice.round)
     TopUI.LabeledField("", self:cached_label("money", G.money, "$"), fieldsPositionX, fieldsPositionY + fieldHeight + padding, fieldWidth * 2 + padding, fieldHeight, G.C.MONEY, field_juice.money)
     -- The base game surfaces the seed during play only on seeded runs
     -- (`UI_definitions.lua:2254`: `G.GAME.seeded and current_seed or nil`).
@@ -614,7 +618,7 @@ function TopUI:draw(screen)
         love.graphics.setColor(G.C.DARK_WHITE or G.C.GREY)
         -- The seed is fixed for the whole run, so this is the most cacheable string on the
         -- screen; it was the only one still being re-shaped sixty times a second.
-        TextCache.printf(self:cached_label("seed", G.SEED or "", "Seed "), 250 - sysDepth * textHeight, 96, 146, "center")
+        TextCache.printf(self:cached_label("seed", G.SEED or "", I18N.text("hud.seed_prefix", nil, "Seed ")), 250 - sysDepth * textHeight, 96, 146, "center")
     end
 
     -- Joker panel (left 2/3 of top screen).
