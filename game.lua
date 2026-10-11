@@ -5341,12 +5341,16 @@ end
 --- discarded, and the Mods screen opens on what to install or remove to continue it.
 ---@return boolean ok
 function Game:check_saved_run_mods(snapshot)
-    local diff = ModLoader.compare(type(snapshot) == "table" and snapshot.mods or nil)
+    local saved = type(snapshot) == "table" and snapshot.mods or nil
+    local diff = ModLoader.compare(saved)
     if not diff then
         self._mods_continue_block = nil
+        self._mods_continue_saved = nil
         return true
     end
     self._mods_continue_block = diff
+    -- Kept so the Mods screen can re-check as the player turns mods on and off there.
+    self._mods_continue_saved = { mods = saved }
     self._menu_sub_state = "mods"
     self._mods_scroll = 0
     if Sfx and Sfx.play then Sfx.play("cancel") end

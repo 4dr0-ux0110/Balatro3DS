@@ -14,6 +14,9 @@
 ---
 --- Every boot writes `mods/mods_log.txt` beside the mods, so a modder on hardware, with no
 --- console, can read why something did not load.
+---
+--- The player turns mods off and on in Options > Mods. The ids of the ones turned off are kept in
+--- `mods/disabled.txt`, one per line, so the list survives a reboot and can be edited off the card.
 
 local Json = require("json")
 require("smods")
@@ -22,12 +25,15 @@ local ModLoader = {}
 
 ModLoader.DIR = "sdmc/mods"
 ModLoader.LOG_PATH = "sdmc/mods/mods_log.txt"
+ModLoader.DISABLED_PATH = "sdmc/mods/disabled.txt"
 
 --- Every mod found, in load order. Each: `{ id, name, version, prefix, author, description,
---- path, main_file, dependencies, status = "loaded"|"error", error, runtime_errors,
+--- path, main_file, dependencies, status = "loaded"|"error"|"disabled", error, runtime_errors,
 --- registered = { jokers, consumables, vouchers, sprites } }`.
 ModLoader.mods = {}
 ModLoader.by_id = {}
+--- The ids the player has turned off, as a set. Read from `DISABLED_PATH` by `load_all`.
+ModLoader.disabled = {}
 
 local function fs()
     return love and love.filesystem
@@ -108,6 +114,7 @@ local function check_dependencies(mod)
         if id and id:lower() ~= "steamodded" then
             local other = ModLoader.by_id[id]
             if not other then return "needs mod '" .. id .. "', which is not installed", false end
+            if other.status == "disabled" then return "needs mod '" .. id .. "', which is turned off", false end
             if other.status == "pending" then
                 waiting = true
             elseif other.status ~= "loaded" then
@@ -139,6 +146,52 @@ local function run_mod(mod)
     return mod
 end
 
+local function read_disabled()
+    local set = {}
+    local f = fs()
+    if not (f and f.getInfo and f.getInfo(ModLoader.DISABLED_PATH, "file")) then return set end
+    for line in tostring(f.read(ModLoader.DISABLED_PATH) or ""):gmatch("[^\r\n]+") do
+        local id = line:match("^%s*(.-)%s*$")
+        if id ~= "" and id:sub(1, 1) ~= "#" then set[id] = true end
+    end
+    return set
+end
+
+local function write_disabled()
+    local f = fs()
+    if not (f and f.write) then return false end
+    local ids = {}
+    for id in pairs(ModLoader.disabled) do ids[#ids + 1] = id end
+    table.sort(ids)
+    if #ids == 0 and f.remove then
+        if f.getInfo(ModLoader.DISABLED_PATH, "file") then pcall(f.remove, ModLoader.DISABLED_PATH) end
+        return true
+    end
+    local text = "# Mods turned off in Options > Mods, one id per line.\n" .. table.concat(ids, "\n") .. "\n"
+    return (pcall(f.write, ModLoader.DISABLED_PATH, text))
+end
+
+--- Whether the player can turn this mod off and on: it needs a manifest, which is where its id
+--- comes from. A folder with no readable manifest has nothing to switch.
+function ModLoader.can_toggle(mod)
+    return type(mod) == "table" and mod.manifest_file ~= nil
+end
+
+function ModLoader.is_enabled(mod)
+    return type(mod) == "table" and not ModLoader.disabled[mod.id]
+end
+
+--- Turn a mod on or off, save the choice, and reload every mod so it takes effect now. Only
+--- safe with no run in memory: the Mods screen is reached from the main menu alone.
+--- @return boolean ok
+function ModLoader.set_enabled(id, enabled)
+    if type(id) ~= "string" then return false end
+    ModLoader.disabled[id] = (not enabled) or nil
+    local saved = write_disabled()
+    ModLoader.load_all()
+    return saved
+end
+
 --- Undo every loaded mod and forget them. Used by the tests; the game loads once per boot.
 function ModLoader.reset()
     for _, mod in ipairs(ModLoader.mods) do SMODS.rollback(mod) end
@@ -153,6 +206,7 @@ function ModLoader.load_all()
     if not (f and f.getDirectoryItems and f.load and f.read and f.getInfo) then return ModLoader.mods end
     if f.createDirectory then f.createDirectory(ModLoader.DIR) end
     SMODS.install_card_methods()
+    ModLoader.disabled = read_disabled()
 
     local found = {}
     for _, folder in ipairs(f.getDirectoryItems(ModLoader.DIR) or {}) do
@@ -169,6 +223,13 @@ function ModLoader.load_all()
     local prefixes = {}
     for _, mod in ipairs(found) do
         ModLoader.mods[#ModLoader.mods + 1] = mod
+        -- A mod that is turned off never runs, so whatever was wrong with it does not apply. It
+        -- keeps its id, so dependants and the saved-run check can say it is off, not missing,
+        -- but not its prefix: that is only reserved by what actually registers under it.
+        if ModLoader.can_toggle(mod) and ModLoader.disabled[mod.id] then
+            mod.status, mod.error = "disabled", nil
+            ModLoader.by_id[mod.id] = ModLoader.by_id[mod.id] or mod
+        end
         if mod.status == "pending" then
             if ModLoader.by_id[mod.id] then
                 fail(mod, "another mod already uses the id '" .. mod.id .. "'")
@@ -266,7 +327,12 @@ function ModLoader.describe_mismatch(diff)
     local lines = {}
     if not diff then return lines end
     for _, m in ipairs(diff.missing) do
-        lines[#lines + 1] = I18N.text("mods.install", { id = m.id, version = m.version }, ("Install %s %s"):format(m.id, m.version))
+        local installed = ModLoader.by_id[m.id]
+        if installed and installed.status == "disabled" then
+            lines[#lines + 1] = I18N.text("mods.turn_on", { id = m.id }, ("Turn on %s"):format(m.id))
+        else
+            lines[#lines + 1] = I18N.text("mods.install", { id = m.id, version = m.version }, ("Install %s %s"):format(m.id, m.version))
+        end
     end
     for _, m in ipairs(diff.changed) do
         lines[#lines + 1] = I18N.text("mods.changed", { id = m.id, saved = m.saved, installed = m.installed },
@@ -274,7 +340,7 @@ function ModLoader.describe_mismatch(diff)
     end
     for _, m in ipairs(diff.extra) do
         lines[#lines + 1] = I18N.text("mods.remove", { id = m.id, version = m.version },
-            ("Remove %s %s (not in this run)"):format(m.id, m.version))
+            ("Turn off %s %s (not in this run)"):format(m.id, m.version))
     end
     return lines
 end
@@ -283,9 +349,11 @@ local function log_lines()
     local lines = { "Balatro3DS mods -- " .. ModLoader.DIR, "" }
     if #ModLoader.mods == 0 then lines[#lines + 1] = "No mods installed." end
     for _, mod in ipairs(ModLoader.mods) do
-        lines[#lines + 1] = ("[%s] %s %s (%s)"):format(
-            mod.status == "loaded" and "OK" or "ERROR", mod.id, mod.version, mod.folder)
-        if mod.status == "loaded" then
+        local tag = ({ loaded = "OK", disabled = "OFF" })[mod.status] or "ERROR"
+        lines[#lines + 1] = ("[%s] %s %s (%s)"):format(tag, mod.id, mod.version, mod.folder)
+        if mod.status == "disabled" then
+            lines[#lines + 1] = "    turned off in Options > Mods (" .. ModLoader.DISABLED_PATH .. ")"
+        elseif mod.status == "loaded" then
             lines[#lines + 1] = ("    %d joker(s), %d consumable(s), %d voucher(s), %d deck skin(s), %d image(s)"):format(
                 #mod.registered.jokers, #mod.registered.consumables, #mod.registered.vouchers,
                 #mod.registered.deck_skins, #mod.registered.sprites)

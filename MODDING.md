@@ -11,6 +11,7 @@ Mods live in a `mods` folder in the game's save directory on the SD card, next t
 ```
 mods/
 ├── mods_log.txt                 written every boot: what loaded, and why anything didn't
+├── disabled.txt                 the mods turned off in Options → Mods (only while any are)
 └── ExampleJokers/
     ├── ExampleJokers.json       manifest
     ├── ExampleJokers.lua        main file
@@ -21,7 +22,7 @@ mods/
         └── ...
 ```
 
-**Options → Mods** in the game lists every mod, whether it loaded, and any errors.
+**Options → Mods** in the game lists every mod, whether it loaded, and any errors. Each mod has an **ON/OFF** switch: tap its row, or pick it with Up/Down and press A. The change takes effect at once, with no restart. A mod that is turned off doesn't run at all, and mods that depend on it don't load either. The ids of the mods that are off are kept in `mods/disabled.txt`, one per line, which you can also edit by hand.
 
 ## Manifest
 
@@ -295,7 +296,7 @@ Deck skins are cosmetic. If the mod is removed, a suit that used one goes back t
 
 ## Saved runs and mods
 
-A run remembers exactly which mods, and which versions, it was played with. It can only be continued with that same set installed. If a mod is missing, at a different version, or newly added, **Continue** opens the Mods screen and lists what to install or remove. The save is kept, not deleted, and works again once the mods match.
+A run remembers exactly which mods, and which versions, it was played with. It can only be continued with that same set installed and turned on. If a mod is missing, turned off, at a different version, or newly added, **Continue** opens the Mods screen and lists what to install, turn on, or turn off. The save is kept, not deleted, and works again once the mods match. Switching mods on that screen updates the list as you go.
 
 This is why `version` matters: bump it when a change would break a run in progress (adding or removing a card, changing what `config` holds), and keep it when it wouldn't.
 

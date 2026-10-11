@@ -289,7 +289,8 @@ suite.test("tooltips fill loc_vars and colour Steamodded markup", function()
     local game = install_example()
     local j = add(game, "j_ex_plus_four")
     local lines = j:get_tooltip_body_lines()
-    local segs = lines[1].segments
+    T.assert_eq(lines[1].kind, "rarity_badge")
+    local segs = lines[2].segments
     T.assert_eq(segs[1].text, "+4")
     T.assert_eq(segs[1].color_key, "MULT")
     T.assert_eq(segs[2].text, " Mult")
@@ -377,7 +378,110 @@ suite.test("a run records its mods and refuses to continue on a different set", 
     T.assert_false(game:check_saved_run_mods({ seed = "X" }))
     T.assert_eq(game._mods_continue_block.extra[1].id, "ExampleMod")
     local lines = ModLoader.describe_mismatch(game._mods_continue_block)
-    T.assert_true(lines[1]:find("Remove ExampleMod", 1, true) ~= nil, lines[1])
+    T.assert_true(lines[1]:find("Turn off ExampleMod", 1, true) ~= nil, lines[1])
+    wipe_mods()
+end)
+
+suite.test("a mod Joker's tooltip leads with its rarity, like a vanilla one", function()
+    local game = install_example()
+    local sevens = add(game, "j_ex_sevens")
+    local lines = sevens:get_tooltip_body_lines()
+    T.assert_eq(lines[1].kind, "rarity_badge")
+    T.assert_eq(lines[1].rarity, 2)
+    T.assert_eq(lines[1].text, "Uncommon")
+    T.assert_eq(#sevens:get_tooltip_body_lines(), #lines, "the badge is added once, not per call")
+
+    I18N.set_language("zh_CN")
+    T.assert_eq(sevens:get_tooltip_body_lines()[1].text, I18N.t("rarity.uncommon"))
+    I18N.set_language("en")
+    wipe_mods()
+end)
+
+--------------------------------------------------------------------------------
+-- Turning mods off and on
+--------------------------------------------------------------------------------
+
+local SIMPLE_JOKER = [[
+SMODS.Joker { key = "j", loc_txt = { name = "J", text = { "x" } }, rarity = 1, cost = 1, sprite = "j.png" }
+]]
+
+suite.test("a mod turned off does not load, stays off across boots, and comes back on", function()
+    wipe_mods()
+    write_mod("Base", { id = "Base", prefix = "base", main_file = "main.lua", version = "1" }, SIMPLE_JOKER)
+    write_mod("Addon", { id = "Addon", prefix = "add", main_file = "main.lua", version = "1",
+        dependencies = { "Base (>=1)" } }, SIMPLE_JOKER)
+    ModLoader.load_all()
+    T.assert_eq(ModLoader.by_id.Base.status, "loaded")
+    T.assert_true(JOKER_DEFS.j_base_j ~= nil)
+
+    ModLoader.set_enabled("Base", false)
+    T.assert_eq(ModLoader.by_id.Base.status, "disabled")
+    T.assert_eq(JOKER_DEFS.j_base_j, nil, "a mod turned off takes its Jokers with it")
+    T.assert_eq(ModLoader.by_id.Addon.status, "error")
+    T.assert_true(ModLoader.by_id.Addon.error:find("turned off", 1, true) ~= nil, ModLoader.by_id.Addon.error)
+    T.assert_eq(#ModLoader.fingerprint(), 0, "neither is part of a run now")
+    T.assert_true(love.filesystem.read(ModLoader.DISABLED_PATH):find("Base", 1, true) ~= nil)
+
+    -- A reboot reads the choice back.
+    ModLoader.disabled = {}
+    ModLoader.load_all()
+    T.assert_eq(ModLoader.by_id.Base.status, "disabled")
+    -- The prefix is free while it is off: only what registers under it reserves it.
+    write_mod("Other", { id = "Other", prefix = "base", main_file = "main.lua", version = "1" }, "")
+    ModLoader.load_all()
+    T.assert_eq(ModLoader.by_id.Other.status, "loaded", tostring(ModLoader.by_id.Other.error))
+    love.filesystem.remove(ModLoader.DIR .. "/Other/Other.json")
+
+    ModLoader.set_enabled("Base", true)
+    T.assert_eq(ModLoader.by_id.Base.status, "loaded")
+    T.assert_eq(ModLoader.by_id.Addon.status, "loaded", tostring(ModLoader.by_id.Addon.error))
+    T.assert_true(JOKER_DEFS.j_base_j ~= nil)
+    T.assert_eq(love.filesystem.getInfo(ModLoader.DISABLED_PATH, "file"), nil, "nothing off, no file")
+    wipe_mods()
+end)
+
+suite.test("a mod with a load error can be turned off, and its error goes with it", function()
+    wipe_mods()
+    write_mod("Bad", { id = "Bad", prefix = "bad", main_file = "main.lua", version = "1" }, "error('nope')")
+    ModLoader.load_all()
+    T.assert_eq(ModLoader.by_id.Bad.status, "error")
+    ModLoader.set_enabled("Bad", false)
+    T.assert_eq(ModLoader.by_id.Bad.status, "disabled")
+    T.assert_eq(ModLoader.by_id.Bad.error, nil)
+    wipe_mods()
+end)
+
+suite.test("the Mods page switches mods, and re-checks a held saved run as it does", function()
+    local game = install_example()
+    local snap = game:build_run_snapshot()
+    local ModsUI = require("mods_ui")
+
+    -- Turned off on the Mods page, the saved run asks for it back by name.
+    ModsUI.open(game)
+    ModsUI.draw(game)
+    T.assert_eq(ModsUI.switchable()[1].id, "ExampleMod")
+    ModsUI.handle_button(game, "a")
+    T.assert_eq(ModLoader.by_id.ExampleMod.status, "disabled", "A flips the focused mod")
+    T.assert_eq(game._menu_sub_state, "mods", "and does not leave the page")
+
+    T.assert_false(game:check_saved_run_mods(snap))
+    local lines = ModLoader.describe_mismatch(game._mods_continue_block)
+    T.assert_true(lines[1]:find("Turn on ExampleMod", 1, true) ~= nil, lines[1])
+
+    -- Tapping the mod's row turns it back on, and the page says the run can go on.
+    ModsUI.draw(game)
+    local rect = game._mods_switch_rects[1]
+    T.assert_true(rect ~= nil, "the mod's row is a switch")
+    ModsUI.handle_touch(game, rect.x + 4, rect.y + 2)
+    T.assert_eq(ModLoader.by_id.ExampleMod.status, "loaded")
+    T.assert_eq(game._mods_continue_block, nil)
+    local text = {}
+    for _, l in ipairs(ModsUI.lines(game)) do text[#text + 1] = l[1] end
+    T.assert_true(table.concat(text, "\n"):find("match the saved run", 1, true) ~= nil)
+    T.assert_true(game:check_saved_run_mods(snap))
+
+    ModsUI.handle_button(game, "b")
+    T.assert_eq(game._menu_sub_state, "main")
     wipe_mods()
 end)
 

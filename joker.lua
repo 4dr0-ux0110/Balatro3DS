@@ -887,6 +887,14 @@ function Joker:get_edition_tooltip_lines()
     return {}
 end
 
+--- The badge naming a Joker's rarity, in the live language, or nil for a rarity outside 1-4.
+local function rarity_badge_line(def)
+    local rarity = tonumber(def.rarity)
+    local rarity_key = ({ "common", "uncommon", "rare", "legendary" })[rarity or 0]
+    if not rarity_key then return nil end
+    return { kind = "rarity_badge", text = I18N.t("rarity." .. rarity_key), rarity = rarity }
+end
+
 function Joker:get_tooltip_body_lines()
     local def = self.def or {}
     local edition_lines = self:get_edition_tooltip_lines()
@@ -912,21 +920,22 @@ function Joker:get_tooltip_body_lines()
         end
         return lines
     end
+    -- A mod Joker's lines come from its loc_txt; the rarity badge vanilla Jokers lead with is
+    -- added here, since the catalog only builds it for the Jokers it defines.
     if type(def.mod_tooltip) == "function" then
         local lines = def.mod_tooltip(self)
-        if type(lines) == "table" and #lines > 0 then return append_extra(lines) end
+        if type(lines) == "table" and #lines > 0 then
+            local badge = rarity_badge_line(def)
+            if badge then table.insert(lines, 1, badge) end
+            return append_extra(lines)
+        end
     end
     -- A translated description (`locales/content/<language>/jokers.lua`) replaces the catalog's
     -- English lines. English has none of these, so it keeps the catalog's untouched. The rarity
     -- badge the catalog puts first is rebuilt in the language, and live lines (`kind =
     -- "current"`) are still filled in by `get_live_current_tooltip_text`.
     if type(def.id) == "string" and I18N.has("joker." .. def.id .. ".description") then
-        local out = {}
-        local rarity = tonumber(def.rarity)
-        local rarity_key = ({ "common", "uncommon", "rare", "legendary" })[rarity or 0]
-        if rarity_key then
-            out[1] = { kind = "rarity_badge", text = I18N.t("rarity." .. rarity_key), rarity = rarity }
-        end
+        local out = { rarity_badge_line(def) }
         for _, l in ipairs(I18N.content_lines("joker", def.id)) do
             out[#out + 1] = type(l) == "table" and l or { kind = "text", text = l }
         end
