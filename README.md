@@ -1,5 +1,7 @@
 # Balatro for Nintendo 3DS
 
+**English** | [简体中文](README.zh-CN.md)
+
 The poker roguelike. Balatro is a hypnotically satisfying deckbuilder where you play illegal poker hands, discover game-changing jokers, and trigger adrenaline-pumping, outrageous combos, now on the 3DS.
 
 This is a fan-made remake of Balatro. This project is in no way affiliated with LocalThunk, the creator of Balatro. All art and sound effects are originally from the game, only adapted to run on the 3DS hardware. If you want to support the creator or get the full Balatro experience, please buy the game.
