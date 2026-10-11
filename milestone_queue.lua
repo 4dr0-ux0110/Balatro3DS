@@ -43,22 +43,33 @@ function Milestones.draw(game)
     if not a then return end
     local C = game.C
     local reduced = game.SETTINGS and game.SETTINGS.REDUCED_MOTION == true
-    local edge = math.min(a.age / SLIDE, (HOLD - a.age) / SLIDE, 1)
-    local y = reduced and 5 or (-31 + 36 * math.max(0, edge))
+    local r = 4 -- corner rounding
+    local p = 4 -- padding
     love.graphics.push()
-    love.graphics.setColor(C.BLACK or C.BLOCK.BACK)
-    love.graphics.rectangle("fill", 88, y + 2, 224, 30)
-    love.graphics.setColor(C.ORANGE)
-    love.graphics.rectangle("fill", 88, y, 224, 28)
-    love.graphics.setColor(C.BLACK or C.BLOCK.BACK)
-    love.graphics.rectangle("fill", 92, y + 4, 216, 20)
     love.graphics.setFont(game.FONTS.PIXEL.SMALL)
+    local height = love.graphics.getFont():getHeight() * 2 + 3 * p
+    local lineThickness = 2
+    local shadowOffset = 4
+    -- Slide from fully off-screen (box + shadow) to the resting y, so no strip is left
+    -- behind at the top edge when the toast appears or is dismissed.
+    local rest_y, hidden_y = 5, -(height + shadowOffset)
+    local edge = math.max(0, math.min(a.age / SLIDE, (HOLD - a.age) / SLIDE, 1))
+    local y = reduced and rest_y or (hidden_y + (rest_y - hidden_y) * edge)
+    love.graphics.setColor(C.BLOCK.SHADOW or C.BLACK)
+    love.graphics.rectangle("fill", 88, y + shadowOffset, 224, height, r)
+    love.graphics.setColor(C.ORANGE)
+    love.graphics.rectangle("fill", 88, y, 224, height, r)
+    love.graphics.setColor(C.BLACK or C.BLOCK.BACK)
+    love.graphics.rectangle("fill", 92, y + lineThickness, 216, height - 2 * lineThickness, r)
+    love.graphics.setFont(game.FONTS.PIXEL.SMALL)
+    local fontHeight = love.graphics.getFont():getHeight()
     love.graphics.setColor(C.WHITE)
-    love.graphics.printf(a.title, 98, y + 5, 204, "center")
+    local title_y = y + lineThickness + p
+    love.graphics.printf(a.title, 98, title_y, 204, "center")
     if a.detail ~= "" then
         love.graphics.setFont(game.FONTS.PIXEL.MICRO or game.FONTS.PIXEL.SMALL)
         love.graphics.setColor(C.DARK_WHITE or C.WHITE)
-        love.graphics.printf(a.detail, 98, y + 14, 204, "center")
+        love.graphics.printf(a.detail, 98, title_y + fontHeight + p, 204, "center")
     end
     love.graphics.pop()
 end

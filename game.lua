@@ -7930,8 +7930,8 @@ function Game:draw_bottom_blind_select()
         local blindWidth = 82
         local label = self:get_blind_display_name(i)
         love.graphics.setColor(blind_color)
-        tx = x + math.floor(card_w / 2) - math.floor(blindWidth / 2)
-        love.graphics.rectangle("fill", tx, btn_y + selectHeight + 8, blindWidth, selectHeight, 4, 4)
+        tx = x + math.floor(card_w / 2) - math.floor(blindWidth / 2) + 2
+        love.graphics.rectangle("fill", tx, btn_y + selectHeight + 8, blindWidth - 4, selectHeight, 4, 4)
 
         love.graphics.setColor(self.C.WHITE)
         love.graphics.setFont(Fonts.fit(self, self.FONTS.PIXEL.SMALL, label, blindWidth - 4))
@@ -7958,7 +7958,7 @@ function Game:draw_bottom_blind_select()
         love.graphics.setFont(self.FONTS.PIXEL.SMALL)
         love.graphics.setColor(self.C.BLOCK.BACK)
         tx = x + math.floor(card_w / 2) - math.floor(scoreWidth / 2)
-        love.graphics.rectangle("fill", tx, y + scorePosY, scoreWidth, scoreHeight, 4, 4)
+        love.graphics.rectangle("fill", tx, y + scorePosY + 2, scoreWidth, scoreHeight, 4, 4)
 
         love.graphics.setColor(self.C.WHITE)
         ty = y + scorePosY + 3

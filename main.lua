@@ -375,6 +375,9 @@ function love.keypressed(key)
             G:give_random_unowned_voucher()
         elseif key == "8" and G.round_score then
             G.round_score = G.round_score + 100000000
+        elseif key == "9" then
+            G._milestone_test_n = (G._milestone_test_n or 0) + 1
+            Milestones.push(G, "discovery", I18N.text("toast.discovery", nil, "New discovery"), "TEST " .. G._milestone_test_n)
         end
     end
 

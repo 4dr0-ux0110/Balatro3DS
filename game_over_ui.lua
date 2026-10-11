@@ -93,14 +93,14 @@ function GameOverUI.draw_top(game)
 
     row(I18N.text("win.best_hand", nil, "Best Hand"), NumberFormat.format(summary.best_hand_score)
         .. (game._run_record_flags and game._run_record_flags.c_best_hand_chips and I18N.text("run.new_record", nil, "  NEW") or ""), game.C.RED)
-    row(I18N.text("win.most_played_hand", nil, "Most Played Hand"), I18N.hand_name(summary.most_played_hand), game.C.WHITE)
+    row(I18N.text("win.most_played_hand", nil, "Most Played Hand"), I18N.hand_name(summary.most_played_hand), game.C.PURPLE)
     row(I18N.text("win.cards_played", nil, "Cards Played"), summary.cards_played, game.C.BLUE)
     row(I18N.text("win.cards_discarded", nil, "Cards Discarded"), summary.cards_discarded, game.C.RED)
     row(I18N.text("win.cards_purchased", nil, "Cards Purchased"), summary.cards_purchased, game.C.MONEY)
     row(I18N.text("win.times_rerolled", nil, "Times Rerolled"), summary.times_rerolled, game.C.GREEN)
     row(I18N.text("win.new_discoveries", nil, "New Discoveries"), summary.new_discoveries, game.C.ORANGE)
     row(I18N.text("game_over.defeated_by", nil, "Defeated By"), summary.defeated_by, game.C.ORANGE)
-    row(I18N.text("win.seed", nil, "Seed"), summary.seed, game.C.WHITE)
+    row(I18N.text("win.seed", nil, "Seed"), summary.seed, game.C.PURPLE)
 end
 
 function GameOverUI.draw_bottom(game)
