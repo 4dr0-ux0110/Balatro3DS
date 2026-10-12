@@ -232,6 +232,15 @@ local EVENT_CONTEXT = {
     on_shop_buy = "buying_card",
     on_destroy = "remove_playing_cards",
     on_cards_added_to_deck = "playing_card_added",
+    on_shop_enter = "starting_shop",
+    on_shop_exit = "ending_shop",
+    on_blind_skipped = "skip_blind",
+    on_blind_defeated = "blind_defeated",
+    on_ante_change = "ante_change",
+    on_hand_drawn = "hand_drawn",
+    on_joker_added = "card_added",
+    on_tag_added = "tag_added",
+    on_hand_final = "final_scoring_step",
 }
 SMODS.EVENT_CONTEXT = EVENT_CONTEXT
 
@@ -281,6 +290,16 @@ function SMODS.build_context(event_name, ctx, joker)
         c.selling_self = ctx.joker == joker
     end
     if kind == "end_of_round" and ctx.game_over ~= nil then c.game_over = ctx.game_over == true end
+    -- Contexts whose flag carries a value rather than `true`.
+    if kind == "hand_drawn" then c.hand_drawn = card_views(ctx.drawn_cards) end
+    if kind == "card_added" then c.card = ctx.joker end
+    if kind == "tag_added" then c.tag_added = ctx.tag end
+    if kind == "ante_change" then
+        c.ante_change = tonumber(ctx.ante_change) or 0
+        c.ante_end = ctx.ante_end == true
+    end
+    -- Set while a `retrigger_joker_check` pass is repeating this Joker's effect.
+    c.retrigger_joker = ctx.retrigger_joker
     c.scoring_name = ctx.hand_type
     c.poker_hands = poker_hands_for(ctx)
     c.scoring_hand = card_views(ctx.cards)
@@ -370,7 +389,132 @@ local function build_effect(center, def)
         return type(ret) == "table" and math.max(0, math.floor(tonumber(ret.repetitions) or 0)) or 0
     end
 
+    --- A port extension: a chance roll just succeeded (`Game:chance_triggers`). Asked with
+    --- `context.probability_success`, it reads `repetitions` back like `context.repetition`.
+    function impl.query_probability_retrigger(joker, pctx)
+        if type(center.calculate) ~= "function" or type(pctx) ~= "table" then return 0 end
+        local c = {
+            probability_success = true,
+            identifier = pctx.key,
+            numerator = pctx.numerator,
+            denominator = pctx.denominator,
+            cardarea = G and G.jokers,
+            blueprint = pctx.blueprint,
+            blueprint_card = pctx.blueprint_card,
+            port = pctx,
+        }
+        local ret = SMODS.call(mod, center.calculate, center, joker, c)
+        return type(ret) == "table" and math.max(0, math.floor(tonumber(ret.repetitions) or 0)) or 0
+    end
+
     return impl
+end
+
+--------------------------------------------------------------------------------
+-- Contexts asked outside an event: retriggers, post_trigger, probability
+--------------------------------------------------------------------------------
+
+--- Whether any held Joker is a mod's. Every helper below is a no-op without one, which keeps
+--- them free in a vanilla run (they sit on paths that run per trigger and per roll).
+local function holding_mod_joker()
+    for _, j in ipairs(G and type(G.jokers) == "table" and G.jokers or EMPTY) do
+        if j and j.def and j.def.smods then return true end
+    end
+    return false
+end
+
+--- Ask each held Joker that runs mod code one context, left to right. Blueprint and Brainstorm
+--- answer for the Joker they copy, with `context.blueprint` set, as in Steamodded. `make()`
+--- builds a fresh context per Joker, since a mod may write to it; `each(joker, ret)` gets every
+--- table returned, `joker` being the one in the slot.
+function SMODS.ask_jokers(make, each)
+    if not (G and G._collect_jokers_in_slot_order) or not holding_mod_joker() then return end
+    for _, j in ipairs(G:_collect_jokers_in_slot_order()) do
+        local id = j.def and j.def.id
+        local source = j
+        if id == "j_blueprint" or id == "j_brainstorm" then source = JokerEffects.resolve_copy_target(j) end
+        local center = type(source) == "table" and source.def and source.def.smods
+        if center and type(center.calculate) == "function" then
+            local c = make()
+            c.cardarea = c.cardarea or (G and G.jokers)
+            if source ~= j then
+                c.blueprint = true
+                c.blueprint_card = j
+            end
+            local ret = SMODS.call(center.mod, center.calculate, center, source, c)
+            if type(ret) == "table" then each(j, ret) end
+        end
+    end
+end
+
+--- A floating message over a Joker, as a bare `message` return raises.
+function SMODS.joker_message(joker, text)
+    local vt = joker and joker.VT
+    if not (vt and text and Popup and Top) then return end
+    local p = Popup()
+    p:spawn(tostring(text), "Nope", vt.x + vt.w * 0.5 * (vt.scale or 1), vt.y + vt.h * 0.5 * (vt.scale or 1))
+    Top:addPopup(p)
+end
+
+--- `context.retrigger_joker_check`: `joker` just triggered on the event in `ctx`. Returns one
+--- entry per extra pass, naming the Joker that asked for it. `context.other_card` is the Joker
+--- that triggered and `context.other_context` the context it triggered in.
+function SMODS.joker_retriggers(joker, ctx)
+    local out = {}
+    if not holding_mod_joker() then return out end
+    local other = SMODS.build_context(ctx.event_name, ctx, joker)
+    SMODS.ask_jokers(function()
+        return { retrigger_joker_check = true, other_card = joker, other_context = other }
+    end, function(j, ret)
+        for _ = 1, math.max(0, math.floor(tonumber(ret.repetitions) or 0)) do out[#out + 1] = j end
+    end)
+    return out
+end
+
+--- `context.post_trigger`: `joker` just triggered. What each Joker returns is applied as if it
+--- had triggered on the same event, its popup over itself.
+function SMODS.post_trigger(joker, ctx)
+    if not holding_mod_joker() then return end
+    local other = SMODS.build_context(ctx.event_name, ctx, joker)
+    local kind = EVENT_CONTEXT[ctx.event_name]
+    SMODS.ask_jokers(function()
+        return { post_trigger = true, other_card = joker, other_context = other }
+    end, function(j, ret)
+        local vt = ctx.VT
+        ctx.VT = j.VT
+        SMODS.apply_return(j, ctx, ret, kind)
+        ctx.VT = vt
+    end)
+end
+
+--- Steamodded's `mod_probability` pass, then its `fix_probability` pass, over one roll's odds.
+--- Each Joker sees the odds as the ones before it left them and may return new
+--- `numerator` / `denominator`. `identifier` names the roll (the vanilla RNG key for the
+--- game's own rolls); `trigger_obj` is the mod's, nil for the game's.
+function SMODS.modify_probability(trigger_obj, identifier, numerator, denominator)
+    if not holding_mod_joker() then return numerator, denominator end
+    for _, flag in ipairs({ "mod_probability", "fix_probability" }) do
+        SMODS.ask_jokers(function()
+            return { [flag] = true, trigger_obj = trigger_obj, identifier = identifier,
+                numerator = numerator, denominator = denominator }
+        end, function(_, ret)
+            numerator = tonumber(ret.numerator) or numerator
+            denominator = tonumber(ret.denominator) or denominator
+        end)
+    end
+    return numerator, denominator
+end
+
+--- `context.pseudorandom_result`: a roll has landed (`result` is whether it hit). A returned
+--- `message` floats over the Joker.
+function SMODS.probability_result(trigger_obj, identifier, result, numerator, denominator)
+    if not holding_mod_joker() then return end
+    SMODS.ask_jokers(function()
+        return { pseudorandom_result = true, result = result, trigger_obj = trigger_obj,
+            identifier = identifier, numerator = numerator, denominator = denominator }
+    end, function(j, ret)
+        if ret.message then SMODS.joker_message(j, ret.message) end
+    end)
 end
 
 --------------------------------------------------------------------------------
@@ -464,7 +608,7 @@ end
 --------------------------------------------------------------------------------
 
 --- `SMODS.Joker { key, loc_txt, config, rarity, cost, sprite, soul_sprite, negative_sprite,
---- loc_vars, calculate,
+--- loc_vars, calculate, in_pool, set_ability,
 --- calc_dollar_bonus, add_to_deck, remove_from_deck, blueprint_compat, eternal_compat,
 --- perishable_compat, unlocked, discovered }`. The Joker's id is `j_<prefix>_<key>`.
 function SMODS.Joker(t)
@@ -486,7 +630,7 @@ function SMODS.Joker(t)
     no_atlas(t, "Joker")
     for name, fn in pairs({ calculate = t.calculate, loc_vars = t.loc_vars,
         calc_dollar_bonus = t.calc_dollar_bonus, add_to_deck = t.add_to_deck,
-        remove_from_deck = t.remove_from_deck }) do
+        remove_from_deck = t.remove_from_deck, in_pool = t.in_pool, set_ability = t.set_ability }) do
         check(fn == nil or type(fn) == "function", "Joker '" .. t.key .. "': " .. name .. " must be a function")
     end
 
@@ -906,6 +1050,17 @@ function SMODS.init_ability(joker)
     if type(def) ~= "table" or not def.smods then return end
     joker.ability = deep_copy(def.config or {})
     joker.ability.name = def.name
+    local center = def.smods
+    if type(center.set_ability) == "function" then
+        SMODS.call(center.mod, center.set_ability, center, joker, true)
+    end
+end
+
+--- `in_pool(self, args)`: false keeps the Joker out of the shop and every random roll.
+function SMODS.in_pool(center)
+    if type(center) ~= "table" or type(center.in_pool) ~= "function" then return true end
+    local ok = SMODS.call(center.mod, center.in_pool, center, {})
+    return ok ~= false
 end
 
 --- Called by the game when a mod Joker joins or leaves the player's Jokers. Not called while a
@@ -930,17 +1085,34 @@ local function oops_factor()
     return 2 ^ n
 end
 
---- `numerator in denominator` chance on the run's seeded stream, doubled by each Oops! All 6s.
-function SMODS.pseudorandom_probability(_, seed, numerator, denominator)
-    local den = math.max(1, math.floor(tonumber(denominator) or 1))
-    local num = math.min(den, (tonumber(numerator) or 1) * oops_factor())
-    local roll = G and G.random and G:random(tostring(seed or "smods"), 1, den) or math.random(1, den)
-    return roll <= num
+--- `numerator in denominator` chance on the run's seeded stream: doubled by each Oops! All 6s,
+--- then reshaped by mod Jokers' `mod_probability` / `fix_probability` unless `no_mod` is set.
+--- Every Joker hears the outcome (`pseudorandom_result`). Returns whether it hit and, as a port
+--- extension, how many times the effect should fire: 1, plus a pass for each
+--- `context.probability_success` repetition (`local hit, times = SMODS.pseudorandom_probability(...)`).
+function SMODS.pseudorandom_probability(trigger_obj, seed, numerator, denominator, identifier, no_mod)
+    seed = tostring(seed or "smods")
+    identifier = identifier or seed
+    local num, den = tonumber(numerator) or 1, math.max(1, tonumber(denominator) or 1)
+    if not no_mod then
+        num, den = SMODS.modify_probability(trigger_obj, identifier, num * oops_factor(), den)
+    end
+    local hit
+    if den == math.floor(den) then
+        hit = (G and G.random and G:random(seed, 1, den) or math.random(1, den)) <= num
+    else
+        hit = (G and G.random and G:random(seed) or math.random()) * den < num
+    end
+    SMODS.probability_result(trigger_obj, identifier, hit, num, den)
+    if not hit then return false, 0 end
+    return true, 1 + (G and G.probability_retriggers and G:probability_retriggers(identifier, num, den) or 0)
 end
 
---- The numbers a "#1# in #2#" tooltip should show, with Oops! All 6s applied.
-function SMODS.get_probability_vars(_, numerator, denominator)
-    return (tonumber(numerator) or 1) * oops_factor(), tonumber(denominator) or 1
+--- The numbers a "#1# in #2#" tooltip should show: the same odds a roll would use.
+function SMODS.get_probability_vars(trigger_obj, numerator, denominator, identifier, _, no_mod)
+    local num, den = tonumber(numerator) or 1, tonumber(denominator) or 1
+    if no_mod then return num, den end
+    return SMODS.modify_probability(trigger_obj, identifier, num * oops_factor(), den)
 end
 
 --- `pseudorandom(seed)` in 0..1, or an integer in `min..max`, on the run's seeded stream.

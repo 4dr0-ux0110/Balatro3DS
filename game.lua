@@ -917,9 +917,19 @@ end
 --- Every queued draw has landed: the hand is whole again.
 function Game:boss_on_hand_deal_complete()
     self:_boss_select_forced_card_if_needed()
+    local drawn = self._cards_drawn_this_deal
+    self._cards_drawn_this_deal = nil
+    if drawn and #drawn > 0 and self.STATE == self.STATES.SELECTING_HAND then
+        self:emit_joker_event("on_hand_drawn", { drawn_cards = drawn })
+    end
 end
 
 function Game:boss_on_card_drawn(card_node)
+    -- Gathered for the `on_hand_drawn` event `boss_on_hand_deal_complete` raises.
+    if card_node then
+        self._cards_drawn_this_deal = self._cards_drawn_this_deal or {}
+        table.insert(self._cards_drawn_this_deal, card_node)
+    end
     local boss_id = self:get_active_boss_blind_id()
     if not boss_id or not card_node then return end
     local data = card_node.card_data or {}
@@ -1763,6 +1773,7 @@ function Game:addTag(tag_type, opts)
     if type(opts) == "table" and opts.orbital_hand_index then
         t.orbital_hand_index = opts.orbital_hand_index
     end
+    self:emit_joker_event("on_tag_added", { tag = t })
     if t.Use and t:Use() then
         if double_count > 0 then
             for _ = 1, double_count do
@@ -6853,6 +6864,9 @@ function Game:joker_allowed_in_random_pool(joker_id)
         return false
     end
     if not self:joker_meets_deck_requirement(joker_id) then return false end
+    -- A mod Joker's own `in_pool` has the last word on whether it can roll.
+    local def = JOKER_DEFS and JOKER_DEFS[joker_id]
+    if def and def.smods and SMODS and SMODS.in_pool and not SMODS.in_pool(def.smods) then return false end
     for from_id, to_id in pairs(self.joker_pool_replacements or {}) do
         if joker_id == from_id then return false end
         if joker_id == to_id then return true end
@@ -6962,14 +6976,19 @@ function Game:random_joker_def_id(key)
 end
 
 ---@param rarity integer
+---@param key string|nil RNG stream
+---@param any_joker boolean|nil skip the pool rules (unlocks, pool swaps, `in_pool`) and draw
+---   from every Joker of that rarity. For the debug spawn keys, which should reach Jokers the
+---   profile has not unlocked yet.
 ---@return string|nil
-function Game:random_joker_def_id_by_rarity(rarity, key)
+function Game:random_joker_def_id_by_rarity(rarity, key, any_joker)
     local r = tonumber(rarity)
     if not r or not JOKER_DEFS then return nil end
     local allow_duplicates = self:hasJoker("j_ring_master")
     local pool = {}
     for id, def in pairs(JOKER_DEFS) do
-        if type(def) == "table" and tonumber(def.rarity) == r and self:joker_allowed_in_random_pool(id) then
+        if type(def) == "table" and tonumber(def.rarity) == r
+            and (any_joker or self:joker_allowed_in_random_pool(id)) then
             if allow_duplicates or not self:_shop_joker_owned(id) then
                 pool[#pool + 1] = id
             end
@@ -7360,14 +7379,20 @@ function Game:apply_consumable_effect(c)
         -- `do_random` includes Oops! All 6s; Wheel is normal/4 (reference card.lua:1467-1485).
         -- Only editionless Jokers are eligible (`card.lua:1468`).
         local eligible = self:editionless_jokers()
-        if #eligible > 0 and self:do_random(1, 4, 1, "wheel_of_fortune") then
-            local j = eligible[self:random("wheel_of_fortune", 1, #eligible)]
-            if Joker and j then
-                j.edition = Joker.normalize_edition(self:poll_guaranteed_edition("wheel_of_fortune"))
-                self:discover_edition(j.edition)
-                if j.refresh_quads then j:refresh_quads() end
-                self:refresh_joker_capacity_from_negatives()
-                self:announce_edition(j, j.edition)
+        local hits = #eligible > 0 and self:chance_triggers(1, 4, 1, "wheel_of_fortune") or 0
+        if hits > 0 then
+            -- A repeat picks again from whatever is still editionless.
+            for _ = 1, hits do
+                if #eligible == 0 then break end
+                local j = eligible[self:random("wheel_of_fortune", 1, #eligible)]
+                if Joker and j then
+                    j.edition = Joker.normalize_edition(self:poll_guaranteed_edition("wheel_of_fortune"))
+                    self:discover_edition(j.edition)
+                    if j.refresh_quads then j:refresh_quads() end
+                    self:refresh_joker_capacity_from_negatives()
+                    self:announce_edition(j, j.edition)
+                end
+                eligible = self:editionless_jokers()
             end
         else 
             local p = Popup()
@@ -7798,6 +7823,7 @@ function Game:skip_blind(index)
     end
     if type(self.blinds_skipped) ~= "table" then self.blinds_skipped = {} end
     self.blinds_skipped[blind_index] = true
+    self:emit_joker_event("on_blind_skipped", { blind_index = blind_index })
     self.current_blind_index = math.min(3, blind_index + 1)
     self.selected_blind_index = self.current_blind_index
     -- Skipping announces itself (`button_callbacks.lua:2763`), on top of whatever the tag
@@ -10639,6 +10665,7 @@ function Game:add_joker_by_def(def_id, create_params, arrive_from)
     self:check_unlock("modify_jokers")
     -- A restored save already carries whatever the mod's add_to_deck changed.
     if def.smods and not self._restoring_run_snapshot then SMODS.on_joker_added(j) end
+    if not self._restoring_run_snapshot then self:emit_joker_event("on_joker_added", { joker = j }) end
 
     -- Snap immediately if we're not in a DPAD slide transition.
     if self.jokers_sliding ~= true then
@@ -11046,6 +11073,35 @@ function Game:emit_hand_cards_event(event_name, ctx)
     end
 end
 
+--- Whether the joker `Joker:apply_effect` just ran did something (not a silent tick).
+local function joker_effect_fired(ctx)
+    return ctx._joker_effect_applied_now == true or ctx._joker_effect_created_item_now == true
+end
+
+--- One extra pass of `j`'s effect that `by` asked for (Steamodded's `retrigger_joker_check`),
+--- announced on `by`. Mod Jokers see `context.retrigger_joker` during it.
+function Game:_apply_joker_retrigger(j, by, ctx)
+    if by and by.juice_up then by:juice_up() end
+    if SMODS and SMODS.joker_message then
+        SMODS.joker_message(by, SMODS.localize({ key = "k_again_ex" }))
+    end
+    ctx.retrigger_joker = true
+    j:apply_effect(ctx)
+    ctx.retrigger_joker = nil
+    self:_sync_joker_ctx(ctx)
+    if joker_effect_fired(ctx) and SMODS and SMODS.post_trigger then SMODS.post_trigger(j, ctx) end
+end
+
+--- After `j` triggers outside the staggered queue: mod Jokers' `post_trigger`, then every
+--- retrigger they grant, run on the spot. A retrigger pass is never itself retriggered.
+function Game:_after_joker_trigger(j, ctx)
+    if not (SMODS and SMODS.joker_retriggers) then return end
+    SMODS.post_trigger(j, ctx)
+    for _, by in ipairs(SMODS.joker_retriggers(j, ctx)) do
+        self:_apply_joker_retrigger(j, by, ctx)
+    end
+end
+
 ---Emit a joker event to all jokers and apply their effects to the context.
 ---`ctx` is a mutable table that joker effects can update (e.g. ctx.chips/ctx.mult).
 ---@param event_name string
@@ -11061,14 +11117,17 @@ function Game:emit_joker_event(event_name, ctx)
                 j:apply_edition_on_hand_scored(ctx)
             end
             self:_sync_joker_ctx(ctx)
+            local triggered = false
             if j and j.matches_trigger and j:matches_trigger(event_name, ctx) and j.apply_effect then
                 j:apply_effect(ctx)
                 self:_sync_joker_ctx(ctx)
+                triggered = joker_effect_fired(ctx)
             end
             if j and j.apply_edition_on_hand_scored then
                 j:apply_edition_on_hand_scored(ctx, true)
                 self:_sync_joker_ctx(ctx)
             end
+            if triggered then self:_after_joker_trigger(j, ctx) end
         end
         self:_apply_observatory_voucher_to_hand_scored_ctx(ctx)
         return
@@ -11079,6 +11138,7 @@ function Game:emit_joker_event(event_name, ctx)
         if j and j.apply_effect then
             j:apply_effect(ctx)
             self:_sync_joker_ctx(ctx)
+            if joker_effect_fired(ctx) then self:_after_joker_trigger(j, ctx) end
         end
     end
 
@@ -11174,10 +11234,19 @@ function Game:_apply_one_joker_emit()
         return false
     end
     local j = q.list[self._joker_emit_next]
+    local retrigger_by = nil
+    if type(j) == "table" and j._joker_retrigger then j, retrigger_by = j.joker, j.by end
     local did_trigger = false
     -- Each beat starts from the default; only a joker that asks for a delay overrides it.
     self._joker_emit_interval = nil
-    if j then
+    if retrigger_by then
+        -- A pass queued by `retrigger_joker_check` below: its "Again!" owns a beat whether or
+        -- not the repeat changes anything.
+        q.ctx = self:prepare_joker_event_ctx(q.event_name, q.ctx)
+        self:_apply_joker_retrigger(j, retrigger_by, q.ctx)
+        did_trigger = true
+        self._joker_emit_interval = tonumber(q.ctx._joker_effect_delay)
+    elseif j then
         q.ctx = self:prepare_joker_event_ctx(q.event_name, q.ctx)
         local edition_triggered = false
         if q.event_name == "on_hand_scored" and j.apply_edition_on_hand_scored then
@@ -11212,6 +11281,15 @@ function Game:_apply_one_joker_emit()
         if edition_triggered and not joker_effect_triggered then
             did_trigger = true
             self._joker_emit_interval = tonumber(self.JOKER_EDITION_EMIT_INTERVAL) or 0.18
+        end
+        -- Mod Jokers react to the trigger, and each retrigger they grant is queued straight
+        -- after this joker so it gets a beat of its own.
+        if joker_effect_triggered and SMODS and SMODS.joker_retriggers then
+            SMODS.post_trigger(j, q.ctx)
+            self:_sync_joker_ctx(q.ctx)
+            for k, by in ipairs(SMODS.joker_retriggers(j, q.ctx)) do
+                table.insert(q.list, self._joker_emit_next + k, { _joker_retrigger = true, joker = j, by = by })
+            end
         end
     end
     self._joker_emit_next = self._joker_emit_next + 1
@@ -11715,6 +11793,7 @@ function Game:_commit_continue_from_shop()
     self.hand_size_delta_juggle = 0
     self:clear_shop_selection()
     self:reset_gamepad_nav()
+    self:emit_joker_event("on_shop_exit", {})
     self:advance_after_shop()
 end
 
@@ -12190,6 +12269,7 @@ function Game:apply_voucher_effect(id)
     if id == "v_magic_trick" or id == "v_illusion" then return end
     if id == "v_hieroglyph" then
         self.ante = (tonumber(self.ante) or 1) - 1
+        self:emit_joker_event("on_ante_change", { ante_change = -1, ante_end = false })
         self.boss_rerolls_used_this_ante = 0
         if self.current_boss_blind_id and self.roll_boss_blind then
             self:roll_boss_blind({ exclude_current = true })
@@ -12198,6 +12278,7 @@ function Game:apply_voucher_effect(id)
     end
     if id == "v_petroglyph" then
         self.ante = (tonumber(self.ante) or 1) - 1
+        self:emit_joker_event("on_ante_change", { ante_change = -1, ante_end = false })
         self.boss_rerolls_used_this_ante = 0
         if self.current_boss_blind_id and self.roll_boss_blind then
             self:roll_boss_blind({ exclude_current = true })
@@ -14126,6 +14207,7 @@ function Game:enter_round_win_after_blind()
     -- `Blind:defeat` flips the Jokers back before the round even ends (`blind.lua:338`), so
     -- Amber Acorn's flip does not follow the player into the cash out and the shop.
     self:restore_joker_facing()
+    self:emit_joker_event("on_blind_defeated", { blind_index = self.current_blind_index })
     -- Garbage Tag counts unused discards across completed blinds (reference tag.lua:158-165).
     self.discardsUnused = math.max(0, tonumber(self.discardsUnused) or 0)
         + math.max(0, tonumber(self.discards) or 0)
@@ -14148,6 +14230,7 @@ function Game:enter_round_win_after_blind()
             self.challenge_joker_slots_disabled = true
         end
         self.ante = (tonumber(self.ante) or 1) + 1
+        self:emit_joker_event("on_ante_change", { ante_change = 1, ante_end = true })
         self:reset_ante_joker_shared_picks()
         self:check_unlock("ante_up", { ante = self.ante })
         self:check_voucher_unlocks({ ante = self.ante, hand_size = self:get_effective_hand_size_limit() })
@@ -15238,19 +15321,61 @@ end
 
 function Game:do_random(min,max,goal,key)
     local g = goal or 1
-    local oops = self:count_jokers_with_id("j_oops")
-    if oops > 0 then
-        -- Every copy doubles all probabilities, rather than adding one winning face
-        -- (reference card.lua:608-611). Keep the base goal as the first winning face
-        -- and wrap at the range boundary so every legal goal doubles uniformly.
-        local outcomes = max - min + 1
-        local winning_faces = math.min(outcomes, 2 ^ oops)
-        local roll = key and self:random(key, min, max) or math.random(min,max)
-        return ((roll - g) % outcomes) < winning_faces
-    else
-        return (key and self:random(key, min, max) or math.random(min,max)) == g
+    local outcomes = max - min + 1
+    -- Every copy of Oops! All 6s doubles all probabilities, rather than adding one winning
+    -- face (reference card.lua:608-611).
+    local winning_faces = math.min(outcomes, 2 ^ self:count_jokers_with_id("j_oops"))
+    -- Mod Jokers can rewrite the odds (Steamodded's `mod_probability` / `fix_probability`).
+    local numerator, denominator = winning_faces, outcomes
+    if SMODS and SMODS.modify_probability then
+        numerator, denominator = SMODS.modify_probability(nil, key, numerator, denominator)
     end
+    local hit
+    if denominator == outcomes and numerator == math.floor(numerator) then
+        local roll = key and self:random(key, min, max) or math.random(min,max)
+        if numerator == 1 then
+            hit = roll == g
+        else
+            -- Keep the base goal as the first winning face and wrap at the range boundary
+            -- so every legal goal doubles uniformly.
+            hit = ((roll - g) % outcomes) < numerator
+        end
+    else
+        -- Odds a mod reshaped into something faces cannot express (2 in 7 on a d4).
+        hit = (key and self:random(key) or math.random()) * denominator < numerator
+    end
+    if SMODS and SMODS.probability_result then
+        SMODS.probability_result(nil, key, hit, numerator, denominator)
+    end
+    return hit
+end
 
+--- `do_random`, counted in triggers: 0 when the roll fails, otherwise 1 plus every extra pass a
+--- joker grants a successful roll (`query_probability_retrigger`). For chance effects worth
+--- repeating; a roll whose outcome is all-or-nothing (Glass breaking, Gros Michel going
+--- extinct) keeps calling `do_random`.
+---@return integer
+function Game:chance_triggers(min, max, goal, key)
+    if not self:do_random(min, max, goal, key) then return 0 end
+    return 1 + self:probability_retriggers(key, 1, max - min + 1)
+end
+
+--- Extra passes jokers grant a chance roll that just succeeded, shaking each that gave one.
+--- Shared by `chance_triggers` and mod rolls (`SMODS.pseudorandom_probability`).
+---@return integer
+function Game:probability_retriggers(key, numerator, denominator)
+    local n = 0
+    local ctx = { key = key, numerator = numerator, denominator = denominator }
+    for _, j in ipairs(self:_collect_jokers_in_slot_order()) do
+        if j.query_probability_retrigger then
+            local extra = math.floor(tonumber(j:query_probability_retrigger(ctx)) or 0)
+            if extra > 0 then
+                n = n + extra
+                if j.juice_up then j:juice_up() end
+            end
+        end
+    end
+    return n
 end
 
 --- A guaranteed edition roll, weighted the way the reference weights one.
@@ -18390,6 +18515,12 @@ end
 
 --- Repeat D-pad left/right while held: navigate, sweep-select (Hold B), or reorder (Hold A + selection).
 function Game:update_dpad_horizontal_repeat(dt)
+    -- Polled, so it never passes through the modal check in `love.gamepadpressed`. Without
+    -- this a held D-pad under Deck/Run Info walks the shop cursor and pops its tooltip.
+    if self:modal_overlay_open() then
+        self:_reset_dpad_horizontal_repeat()
+        return
+    end
     local reorder = self:is_hand_reorder_mode() or self:is_joker_reorder_mode() or self:is_consumable_reorder_mode()
     local sweep = self:is_sweep_select_mode() and not reorder
     local card_nav = self:is_hand_cursor_active() and not sweep and not reorder

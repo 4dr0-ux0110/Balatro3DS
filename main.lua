@@ -359,11 +359,11 @@ function love.keypressed(key)
 
     if G and G.DEBUG then
         if key == "1" then
-            G:add_joker_by_def(G:random_joker_def_id_by_rarity(1))
+            G:add_joker_by_def(G:random_joker_def_id_by_rarity(1, "debug_joker", true))
         elseif key == "2" then
-            G:add_joker_by_def(G:random_joker_def_id_by_rarity(2))
+            G:add_joker_by_def(G:random_joker_def_id_by_rarity(2, "debug_joker", true))
         elseif key == "3" then
-            G:add_joker_by_def(G:random_joker_def_id_by_rarity(3))
+            G:add_joker_by_def(G:random_joker_def_id_by_rarity(3, "debug_joker", true))
         elseif key == "4" then
             G:add_consumable(G:random_consumable_id_of_kind("tarot"))
        

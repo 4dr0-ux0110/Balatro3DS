@@ -110,6 +110,8 @@ SMODS.Joker {
 | `loc_vars(self, info_queue, card)` | Return `{ vars = { ... } }`. `info_queue` is accepted and ignored. |
 | `calculate(self, card, context)` | See below. |
 | `calc_dollar_bonus(self, card)` | Money paid at the end of the round, listed in the round's payout. |
+| `in_pool(self, args)` | Return `false` to keep the Joker out of the shop and every random roll. `args` is an empty table. |
+| `set_ability(self, card, initial)` | Called whenever a copy of the Joker is created (including shop cards), after `config` has been copied into `card.ability`. A loaded run then restores the saved `card.ability` over it. |
 | `add_to_deck(self, card, from_debuff)`, `remove_from_deck(...)` | Called when the Joker is gained or lost. Not called when a saved run is loaded, because the save already includes their effects. |
 
 **Description markup:** `{C:mult}`, `{C:chips}`, `{C:money}`, `{C:attention}`, `{C:green}`, `{C:red}`, `{C:purple}` and `{C:inactive}` work, and `{}` resets the colour. `{X:...}` uses its colour for the text. `{s:...}` and `{V:n}` are ignored.
@@ -122,12 +124,25 @@ SMODS.Joker {
 | `context.individual` + `context.cardarea == G.play` | Each scored card. `context.other_card` is the card. |
 | `context.individual` + `context.cardarea == G.hand` | Each card held in hand. |
 | `context.repetition` | Asked per scored card: return `{ repetitions = n }` to retrigger it. |
+| `context.retrigger_joker_check` | Asked each time a Joker triggers. `context.other_card` is that Joker and `context.other_context` the context it triggered in. Return `{ repetitions = n }` to run its effect `n` more times; during those passes it sees `context.retrigger_joker`. A repeat is never repeated again. Check `context.other_card ~= card` unless the Joker should repeat itself. There is no `context.other_ret`. Unlike Steamodded, no `optional_features` opt-in is needed. |
+| `context.post_trigger` | After each Joker triggers, with the same `other_card` and `other_context`. What you return scores as if this Joker had triggered on that event. |
+| `context.probability_success` | Port only. A chance roll just succeeded: Lucky Card, Bloodstone, Business Card, Reserved Parking, Space Joker, 8 Ball, Hallucination, Wheel of Fortune, or a mod's `SMODS.pseudorandom_probability`. Return `{ repetitions = n }` to fire its effect `n` more times. `context.identifier` names the roll and `context.numerator` / `context.denominator` give its odds. Rolls that only go one way (Glass breaking, Gros Michel and Cavendish going extinct, The Wheel) are not asked. |
+| `context.mod_probability`, `context.fix_probability` | Before any roll, the game's or a mod's. Return `{ numerator = x, denominator = y }` to change the odds. Every `mod_probability` answer is applied in Joker order, then every `fix_probability` answer. Oops! All 6s is already counted. `context.identifier` names the roll; `context.trigger_obj` is what the mod passed, or nil for the game's own rolls. |
+| `context.pseudorandom_result` | After any roll, with `context.result` (true when it hit) and the same fields. A returned `message` is shown; other returns are ignored. |
 | `context.joker_main` | The Joker's main scoring step. |
+| `context.final_scoring_step` | After every Joker has scored, before the total lands and before Plasma Deck balances it. Returns score as usual. |
 | `context.after` | After the hand has scored. |
 | `context.end_of_round` | End of the round. |
+| `context.blind_defeated` | The Blind's score has been reached, before the end-of-round payouts. |
 | `context.discard` | Each discarded card (`context.other_card`). Also `context.pre_discard`. |
 | `context.setting_blind`, `context.first_hand_drawn` | Blind selected; first hand of the round. |
+| `context.hand_drawn` | A deal to the hand has finished during a round. `context.hand_drawn` is the list of cards just drawn. |
+| `context.skip_blind` | A Blind was skipped, after its Tag was given. |
+| `context.ante_change` | The Ante changed. `context.ante_change` is the amount (`1`, or `-1` from Hieroglyph and Petroglyph) and `context.ante_end` is true when a Boss was beaten. |
 | `context.selling_card`, `context.selling_self` | A Joker is sold; `selling_self` when it's this one. |
+| `context.card_added` | A Joker was gained (bought, created or given). `context.card` is the new Joker. Not raised when a saved run is loaded. |
+| `context.tag_added` | A Tag was gained. `context.tag_added` is the Tag. |
+| `context.starting_shop`, `context.ending_shop` | The shop opens; the player leaves it. |
 | `context.reroll_shop`, `context.buying_card`, `context.open_booster`, `context.skipping_booster`, `context.using_consumeable` | Shop and pack events. |
 | `context.playing_card_added`, `context.remove_playing_cards` | Cards added to or destroyed from the deck. |
 
@@ -146,12 +161,12 @@ Playing cards support `:get_id()` (2 to 14, where Jack is 11 and Ace is 14), `:i
 ### Helpers
 
 All of these use the run's seed:
-- `SMODS.pseudorandom_probability(card, seed, numerator, denominator)`
-- `SMODS.get_probability_vars(card, numerator, denominator)`
+- `SMODS.pseudorandom_probability(card, seed, numerator, denominator, identifier, no_mod)` returns whether the roll hit. As a port extension, it also returns how many times the effect should run: 1, plus any `probability_success` repetitions. Use `local hit, times = ...` to support Jokers like Natural 20!.
+- `SMODS.get_probability_vars(card, numerator, denominator, identifier)` returns the odds a roll would use, for tooltips.
 - `pseudorandom(seed)`
 - `pseudorandom_element(list, seed)`
 
-Oops! All 6s is counted. `localize("k_upgrade_ex")` and a few other common message keys work, and so does `ease_dollars(n)`.
+Oops! All 6s and every `mod_probability` / `fix_probability` Joker are counted, unless `no_mod` is true. `localize("k_upgrade_ex")` and a few other common message keys work, and so does `ease_dollars(n)`.
 
 ## Negative art
 
@@ -305,7 +320,8 @@ This is why `version` matters: bump it when a change would break a run in progre
 - **No other content yet.** Decks, editions, seals, enhancements, blinds, booster packs and poker hands can't be added. Vouchers have no `calculate`, and deck skins cover only the face cards.
 - **No `G.GAME`, `G.jokers.cards`, `G.E_MANAGER`, `SMODS.destroy_cards`, `SMODS.calculate_effect`, hooks into `Game:init_game_object`, or `reset_game_globals`.** The port's game state is laid out differently. Code that touches these raises a runtime error. The error is caught: that Joker does nothing for that call, and the error appears on the Mods screen and in `mods_log.txt`.
 - **No shaders.** Foil, Holographic and Polychrome mod Jokers are drawn with the port's own additive texture passes, like vanilla Jokers. Negative needs its own art (see [Negative art](#negative-art)).
-- **`yes_pool_flag`, `no_pool_flag`, `in_pool` and `info_queue` are ignored.**
+- **`yes_pool_flag`, `no_pool_flag` and `info_queue` are ignored.** `in_pool` returns only whether the Joker can roll; a second `allow_duplicates` return is ignored.
+- **Contexts not raised yet:** `blind_disabled`, `debuff_card`, `debuff_hand`, `destroy_card` (`destroying_card`), `modify_scoring_hand`, `evaluate_poker_hand`, `check_enhancement`, `money_altered`, `initial_scoring_step`, `playing_card_end_of_round`, `change_rank` and `change_suit`. These need deeper changes to the port's scoring and deck code.
 
 ## Debugging
 

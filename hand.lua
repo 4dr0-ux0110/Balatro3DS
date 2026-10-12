@@ -1903,6 +1903,30 @@ function Hand:_update_play_sequence(dt)
             seq.finalize_step = 2
         end
 
+        -- Steamodded's `final_scoring_step`: one more joker pass over the finished chips and
+        -- mult, before the deck (Plasma) and the total see them. Only mod Jokers listen.
+        if seq.finalize_step == 2 and not seq.final_step_done then
+            seq.final_step_done = true
+            if not seq.voided and G and G.begin_joker_emit then
+                local fctx = {
+                    event = "on_hand_final",
+                    event_name = "on_hand_final",
+                    chips = tonumber(G.selectedHandChips) or 0,
+                    mult = tonumber(G.selectedHandMult) or 1,
+                    hand_index = G.selectedHand,
+                    hand_type = G.handlist and G.handlist[G.selectedHand] or nil,
+                    cards = seq.cards,
+                    full_hand = seq.cards,
+                }
+                if G:begin_joker_emit("on_hand_final", fctx) then
+                    seq.phase = "wait_jokers"
+                    seq.joker_wait_resume = { phase = "finalize", finalize_step = 2 }
+                    seq.timer = 0
+                    return
+                end
+            end
+        end
+
         -- Step 2: the total lands. The reference holds 0.4 s after the last trigger before
         -- the button thunk (`state_events.lua:1029`), then a further 0.8 s before the chip
         -- commit sting (`state_events.lua:1038`) — "thunk … ka-ching", never one frame.

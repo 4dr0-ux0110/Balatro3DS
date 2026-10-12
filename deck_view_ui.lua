@@ -549,7 +549,7 @@ local function draw_tabs(game, x, y, w, labels, current, rects)
 
     love.graphics.setFont(game.FONTS.PIXEL.SMALL)
     for i, label in ipairs(labels) do
-        local tx = x + pip_w + 4 + (i - 1) * (tw + gap)
+        local tx = math.floor(x + pip_w + 4 + (i - 1) * (tw + gap))
         local on = (i == current)
         local face = on and game.C.RED or mix(game.C.RED, game.C.BLOCK.BACK, 0.45)
         draw_button_with_shadow(tx, y, tw, 19, 3, 0, face, game.C.BLOCK.SHADOW, 2)

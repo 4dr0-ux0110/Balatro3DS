@@ -1376,24 +1376,28 @@ function Card:do_enhancement(ctx)
         G:addPopup(p)
         Sfx.play_money(scoring_pitch())
     elseif self.enhancement == "lucky" then
-        local triggered = false
+        -- Each roll can fire more than once (`Game:chance_triggers`); repeats fold into one
+        -- popup so the card still takes a single beat of the scoring sequence.
         -- 1 in 5 chance to give +20 mult
-        if G:do_random(1, 5, 1, "lucky_mult") then
-            p:spawn(20, "mult", card_center_x, card_center_y)
+        local mult_n = G:chance_triggers(1, 5, 1, "lucky_mult")
+        if mult_n > 0 then
+            p:spawn(20 * mult_n, "mult", card_center_x, card_center_y)
             G:addPopup(p)
-            ctx.mult = (tonumber(ctx.mult) or 1) + 20
-            triggered = true
+            ctx.mult = (tonumber(ctx.mult) or 1) + 20 * mult_n
             Sfx.play_mult(scoring_pitch())
         end
         -- 1 in 15 to give +$20
-        if G:do_random(1, 15, 1, "lucky_money") then
-            G.money = G.money + 20
-            p:spawn(20, "money", card_center_x, card_center_y)
-            G:addPopup(p)
-            triggered = true
+        local money_n = G:chance_triggers(1, 15, 1, "lucky_money")
+        if money_n > 0 then
+            G.money = G.money + 20 * money_n
+            -- Its own popup, queued behind the mult one when both hit.
+            local mp = Popup()
+            mp:spawn(20 * money_n, "money", card_center_x, card_center_y, nil, mult_n > 0 and 0.8 or 0)
+            G:addPopup(mp)
             Sfx.play_money(scoring_pitch())
         end
-        if triggered then
+        -- Lucky Cat grows once per trigger, so a repeated roll counts again.
+        for _ = 1, math.max(mult_n, money_n) do
             G:emit_joker_event("lucky_trigger", { shake_card_node = self })
         end
     end

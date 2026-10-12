@@ -188,6 +188,27 @@ suite.test("the shoulders switch tabs and the Close button closes", function()
     T.assert_false(g._deck_view_open)
 end)
 
+--- The held-D-pad repeat is polled from `update`, not dispatched from `gamepadpressed`, so it
+--- skipped the modal check there and walked the shop cursor underneath the deck view.
+suite.test("a held D-pad does not navigate the shop under the deck view", function()
+    local g = game_with_deck()
+    g.STATE = g.STATES.SHOP
+    T.assert_true(g:enter_deck_view())
+
+    local steps = 0
+    g._gamepad_horizontal_nav_active = function() return true end
+    g._dpad_horizontal_dir = function() return 1 end
+    g._dpad_horizontal_step = function() steps = steps + 1 end
+
+    g:update_dpad_horizontal_repeat(0.016)
+    g:update_dpad_horizontal_repeat(1)
+    T.assert_eq(steps, 0, "nothing under the modal moves")
+
+    g:exit_deck_view()
+    g:update_dpad_horizontal_repeat(0.016)
+    T.assert_eq(steps, 1, "and the shop navigates again once it closes")
+end)
+
 --- Three passes over every card in the run, every frame, for numbers that cannot move while
 --- a modal is over the deck. Per-frame allocation is what this port can least afford.
 suite.test("the top screen's readout is derived once, not once per draw", function()

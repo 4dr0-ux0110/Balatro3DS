@@ -1424,3 +1424,13 @@ function Joker:query_retrigger(ctx)
     end
     return 0
 end
+
+--- Extra times a successful chance roll fires (used by `Game:chance_triggers`).
+---@param ctx table `{ key, numerator, denominator }`
+---@return number
+function Joker:query_probability_retrigger(ctx)
+    if self.effect_impl and type(self.effect_impl.query_probability_retrigger) == "function" then
+        return tonumber(self.effect_impl.query_probability_retrigger(self, ctx)) or 0
+    end
+    return 0
+end

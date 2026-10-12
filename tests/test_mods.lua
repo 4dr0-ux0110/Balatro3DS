@@ -920,4 +920,238 @@ SMODS.Voucher {
     I18N.set_language("en")
 end)
 
+suite.test("context.probability_success repeats a chance roll that hit", function()
+    wipe_mods()
+    write_mod("Dice", { id = "Dice", name = "Dice", prefix = "dice", main_file = "main.lua" }, [[
+SMODS.Joker {
+    key = "nat20", rarity = 3, cost = 6, sprite = "nat20.png", blueprint_compat = true,
+    calculate = function(self, card, context)
+        if context.probability_success then return { repetitions = 1 } end
+    end,
+}
+]])
+    ModLoader.load_all()
+    local game = bootstrap.new_game(4402)
+    G = game
+    _G.Top = _G.Top or { addPopup = function() end }
+    local real_do_random = game.do_random
+    game.do_random = function() return true end
+
+    game.jokers = {}
+    T.assert_eq(game:chance_triggers(1, 5, 1, "t"), 1, "a hit with no help fires once")
+    T.assert_true(game:add_joker_by_def("j_seltzer"))
+    T.assert_eq(game:chance_triggers(1, 5, 1, "t"), 1, "card retriggers do not repeat rolls")
+    T.assert_true(game:add_joker_by_def("j_dice_nat20"))
+    T.assert_eq(game:chance_triggers(1, 5, 1, "t"), 2, "the mod Joker fires it again")
+    -- Blueprint copies the Joker to its right: Blueprint, then Natural 20.
+    game.jokers = {}
+    T.assert_true(game:add_joker_by_def("j_blueprint"))
+    T.assert_true(game:add_joker_by_def("j_dice_nat20"))
+    T.assert_eq(game:chance_triggers(1, 5, 1, "t"), 3, "Blueprint copies it")
+
+    local lucky = Card(0, 0, 1, 1, { rank = 5, suit = "Spades", enhancement = "lucky" })
+    local money = game.money
+    local ctx = { chips = 0, mult = 1 }
+    lucky:do_enhancement(ctx)
+    T.assert_eq(ctx.mult, 61, "+20 Mult three times")
+    T.assert_eq(game.money - money, 60, "+$20 three times")
+
+    game.do_random = function() return false end
+    T.assert_eq(game:chance_triggers(1, 5, 1, "t"), 0, "a miss never fires")
+    game.do_random = real_do_random
+    wipe_mods()
+end)
+
+--- A mod whose Jokers each exercise one of the hooks below. `seen` records every context flag
+--- the recorder is asked with, so a test can check an engine path raised it.
+local HOOKS = [[
+SEEN = {}
+_MOD.seen = SEEN
+SMODS.Joker {
+    key = "plus", rarity = 1, sprite = "j.png", blueprint_compat = true,
+    calculate = function(self, card, context)
+        if context.joker_main then
+            if context.retrigger_joker then SEEN.retrigger_pass = (SEEN.retrigger_pass or 0) + 1 end
+            return { mult = 4 }
+        end
+    end,
+}
+SMODS.Joker {
+    key = "again", rarity = 1, sprite = "j.png", blueprint_compat = true,
+    calculate = function(self, card, context)
+        if context.retrigger_joker_check and context.other_card ~= card then
+            return { repetitions = 1 }
+        end
+    end,
+}
+SMODS.Joker {
+    key = "echo", rarity = 1, sprite = "j.png",
+    calculate = function(self, card, context)
+        if context.post_trigger and context.other_card ~= card then return { chips = 1 } end
+    end,
+}
+SMODS.Joker {
+    key = "loaded", rarity = 1, sprite = "j.png",
+    calculate = function(self, card, context)
+        if context.mod_probability then return { numerator = context.numerator * 2 } end
+        if context.pseudorandom_result then
+            SEEN.results = (SEEN.results or 0) + 1
+            SEEN.last_result = context.result
+        end
+    end,
+}
+SMODS.Joker {
+    key = "sure", rarity = 1, sprite = "j.png",
+    calculate = function(self, card, context)
+        if context.fix_probability then return { numerator = context.denominator } end
+        if context.probability_success then return { repetitions = 2 } end
+    end,
+}
+SMODS.Joker {
+    key = "recorder", rarity = 1, sprite = "j.png",
+    in_pool = function(self, args) return false end,
+    set_ability = function(self, card, initial) card.ability.stamp = initial end,
+    calculate = function(self, card, context)
+        for _, flag in ipairs({ "card_added", "tag_added", "ante_change", "ending_shop",
+            "starting_shop", "skip_blind", "blind_defeated", "hand_drawn", "final_scoring_step" }) do
+            if context[flag] then SEEN[flag] = context[flag] end
+        end
+        if context.card_added then SEEN.added_card = context.card end
+        if context.final_scoring_step then return { xmult = 2 } end
+    end,
+}
+]]
+
+local function install_hooks()
+    wipe_mods()
+    write_mod("Hooks", { id = "Hooks", name = "Hooks", prefix = "hk", main_file = "main.lua" }, HOOKS)
+    ModLoader.load_all()
+    local game = bootstrap.new_game(4403)
+    G = game
+    G.play = G.play or SMODS.PLAY
+    _G.Top = _G.Top or { addPopup = function() end }
+    return game
+end
+
+--- The mod's `SEEN` table. Mod globals live in the mod's own environment, so the mod hands
+--- it over through `_MOD`.
+local function seen()
+    return ModLoader.by_id.Hooks.seen
+end
+
+local function hold(game, ids)
+    game.jokers = {}
+    for _, id in ipairs(ids) do T.assert_true(game:add_joker_by_def(id), id .. " should be addable") end
+end
+
+local function hand_scored()
+    return { event = "on_hand_scored", event_name = "on_hand_scored", chips = 10, mult = 2 }
+end
+
+suite.test("retrigger_joker_check repeats another Joker's effect", function()
+    local game = install_hooks()
+    hold(game, { "j_hk_plus", "j_hk_again" })
+    local ctx = hand_scored()
+    game:emit_joker_event("on_hand_scored", ctx)
+    T.assert_eq(ctx.mult, 10, "+4 Mult, then +4 again")
+    T.assert_eq(seen().retrigger_pass, 1, "the repeat sees context.retrigger_joker")
+
+    -- The staggered queue the scoring sequence uses gives the repeat its own beat.
+    ctx = hand_scored()
+    game:begin_joker_emit("on_hand_scored", ctx)
+    local guard = 0
+    while game:joker_emit_busy() and guard < 50 do
+        game:_update_joker_emit_queue(1)
+        guard = guard + 1
+    end
+    T.assert_eq(ctx.mult, 10, "the queued path repeats it too")
+
+    -- A vanilla Joker can be retriggered as well.
+    hold(game, { "j_joker", "j_hk_again" })
+    ctx = hand_scored()
+    game:emit_joker_event("on_hand_scored", ctx)
+    T.assert_eq(ctx.mult, 10, "Joker's +4 Mult twice")
+    wipe_mods()
+end)
+
+suite.test("post_trigger lets a Joker react to another's trigger", function()
+    local game = install_hooks()
+    hold(game, { "j_hk_plus", "j_hk_echo" })
+    local ctx = hand_scored()
+    game:emit_joker_event("on_hand_scored", ctx)
+    T.assert_eq(ctx.mult, 6, "+4 Mult from plus")
+    T.assert_eq(ctx.chips, 11, "+1 chip from echo reacting to it")
+    wipe_mods()
+end)
+
+suite.test("mod_probability and fix_probability reshape every roll", function()
+    local game = install_hooks()
+    hold(game, { "j_hk_loaded" })
+    local num, den = SMODS.get_probability_vars(nil, 1, 4)
+    T.assert_eq(num, 2, "loaded doubles the numerator")
+    T.assert_eq(den, 4)
+
+    hold(game, { "j_hk_sure" })
+    local hits = 0
+    for i = 1, 20 do
+        if game:do_random(1, 4, 1, "fixed" .. i) then hits = hits + 1 end
+    end
+    T.assert_eq(hits, 20, "fix_probability made the game's own roll certain")
+    local hit, times = SMODS.pseudorandom_probability(nil, "modroll", 1, 1000)
+    T.assert_true(hit, "and a mod's roll")
+    T.assert_eq(times, 3, "probability_success adds two more passes to a mod roll")
+
+    hold(game, { "j_hk_loaded" })
+    seen().results = 0
+    game:do_random(1, 4, 1, "heard")
+    SMODS.pseudorandom_probability(nil, "heard2", 1, 4)
+    T.assert_eq(seen().results, 2, "pseudorandom_result hears both kinds of roll")
+    wipe_mods()
+end)
+
+suite.test("in_pool and set_ability", function()
+    local game = install_hooks()
+    T.assert_false(game:joker_allowed_in_random_pool("j_hk_recorder"), "in_pool false keeps it out")
+    T.assert_true(game:joker_allowed_in_random_pool("j_hk_plus"), "others still roll")
+    hold(game, { "j_hk_recorder" })
+    T.assert_eq(game.jokers[1].ability.stamp, true, "set_ability ran on creation")
+    wipe_mods()
+end)
+
+suite.test("lifecycle contexts fire from the game's own paths", function()
+    local game = install_hooks()
+    hold(game, { "j_hk_recorder" })
+    T.assert_true(game:add_joker_by_def("j_joker"))
+    T.assert_eq(seen().added_card, game.jokers[2], "card_added hands over the new Joker")
+    game:emit_joker_event("on_ante_change", { ante_change = -1 })
+    T.assert_eq(seen().ante_change, -1, "ante_change carries the change")
+    game:emit_joker_event("on_shop_exit", {})
+    T.assert_true(seen().ending_shop, "ending_shop")
+    game:emit_joker_event("on_hand_drawn", { drawn_cards = { Card(0, 0, 1, 1, { rank = 5, suit = "Spades" }) } })
+    T.assert_eq(#seen().hand_drawn, 1, "hand_drawn lists the cards drawn")
+    game:addTag("investment")
+    T.assert_true(seen().tag_added ~= nil, "tag_added from addTag")
+    game:roll_skips()
+    game:skip_blind(1)
+    T.assert_true(seen().skip_blind, "skip_blind from skip_blind")
+    wipe_mods()
+end)
+
+suite.test("final_scoring_step changes the score before it lands", function()
+    local game = install_hooks()
+    hold(game, { "j_hk_recorder" })
+    game.selectedHandChips, game.selectedHandMult = 10, 2
+    local hand = setmetatable({
+        _play_sequence = { phase = "finalize", finalize_step = 2, timer = 0, cards = {} },
+    }, { __index = Hand })
+    local seq = hand._play_sequence
+    for _ = 1, 20 do
+        if seq.final_score then break end
+        hand:_update_play_sequence(0.5)
+        game:_update_joker_emit_queue(1)
+    end
+    T.assert_eq(seq.final_score, 40, "10 chips x (2 Mult x2)")
+    wipe_mods()
+end)
+
 return suite

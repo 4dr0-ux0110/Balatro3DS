@@ -305,11 +305,13 @@ local function delegate_joker_effect(delegator, src, ctx)
     end
 end
 
-local function delegate_joker_retrigger(delegator, src, ctx)
+--- `method` is `query_retrigger` (card retriggers) or `query_probability_retrigger`.
+local function delegate_joker_retrigger(delegator, src, ctx, method)
+    method = method or "query_retrigger"
     local resolved = resolve_copy_target(src)
     if type(resolved) ~= "table" or resolved == delegator then return 0 end
-    if type(resolved.query_retrigger) ~= "function" then return 0 end
-    return tonumber(resolved:query_retrigger(ctx)) or 0
+    if type(resolved[method]) ~= "function" then return 0 end
+    return tonumber(resolved[method](resolved, ctx)) or 0
 end
 
 local function first_scoring_play_node(played_cards)
@@ -547,6 +549,15 @@ local SPECIAL = {
             end
             return 0
         end,
+        query_probability_retrigger = function(joker, ctx)
+            if type(G and G.jokers) ~= "table" then return 0 end
+            for i, jj in ipairs(G.jokers) do
+                if jj == joker then
+                    return delegate_joker_retrigger(joker, G.jokers[i + 1], ctx, "query_probability_retrigger")
+                end
+            end
+            return 0
+        end,
         tooltip_lines = function(joker)
             if type(G and G.jokers) ~= "table" then return {} end
             for i, jj in ipairs(G.jokers) do
@@ -571,6 +582,10 @@ local SPECIAL = {
         query_retrigger = function(brainstorm, ctx)
             local src = G and G.jokers and G.jokers[1]
             return delegate_joker_retrigger(brainstorm, src, ctx)
+        end,
+        query_probability_retrigger = function(brainstorm, ctx)
+            return delegate_joker_retrigger(brainstorm, G and G.jokers and G.jokers[1], ctx,
+                "query_probability_retrigger")
         end,
         tooltip_lines = function(joker)
             if type(G and G.jokers) ~= "table" then return {} end
@@ -779,7 +794,11 @@ local SPECIAL = {
     j_to_the_moon = { matches_trigger = function(_, e) return e == "on_round_end" end, apply_effect = function(j, ctx) add_round_win_money(ctx, j, math.floor((tonumber(G and G.money) or 0) / 5)) end },
     j_reserved_parking = {
         matches_trigger = function(_, e) return e == "card_held" end,
-        apply_effect = function(_, ctx) if rank_is_face(ctx.rank) and G:do_random(1, 2, 1, "parking") then add_money(ctx, 1) end end
+        apply_effect = function(_, ctx)
+            if not rank_is_face(ctx.rank) then return end
+            local n = G:chance_triggers(1, 2, 1, "parking")
+            if n > 0 then add_money(ctx, n) end
+        end
     },
     j_baron = { matches_trigger = function(_, e) return e == "card_held" end, apply_effect = function(_, ctx) if tonumber(ctx.rank) == 13 then mul_mult(ctx, 1.5) end end },
     j_shoot_the_moon = { matches_trigger = function(_, e) return e == "card_held" end, apply_effect = function(_, ctx) if tonumber(ctx.rank) == 12 then add_mult(ctx, 13) end end },
@@ -800,7 +819,11 @@ local SPECIAL = {
     j_onyx_agate = { matches_trigger = function(_, e) return e == "card_played" end, apply_effect = function(_, ctx) if is_suit(ctx.suit, "Clubs") then add_mult(ctx, 7) end end },
     j_bloodstone = {
         matches_trigger = function(_, e) return e == "card_played" end,
-        apply_effect = function(_, ctx) if is_suit(ctx.suit, "Hearts") and G:do_random(1, 2, 1, "bloodstone") then mul_mult(ctx, 1.5) end end
+        apply_effect = function(_, ctx)
+            if not is_suit(ctx.suit, "Hearts") then return end
+            local n = G:chance_triggers(1, 2, 1, "bloodstone")
+            if n > 0 then mul_mult(ctx, 1.5 ^ n) end
+        end
     },
     j_8_ball = {
         matches_trigger = function(_, e) return e == "card_played" end,
@@ -808,14 +831,16 @@ local SPECIAL = {
             if tonumber(ctx.rank) ~= 8 then return end
             local odds = tonumber((joker.effect_config or {}).extra) or 4
             odds = math.max(2, odds)
-            if not G:do_random(1, odds, 1, "8ball") then return end
+            local n = G:chance_triggers(1, odds, 1, "8ball")
             if not G or not G.can_add_consumable or not G.add_consumable or not G.random_consumable_id_of_kind then return end
-            if not G:can_add_consumable() then return end
-            local tid = G:random_consumable_id_of_kind("tarot", nil, "8ba")
-            if tid then
-                G:add_consumable(tid)
-                mark_effect_applied(ctx)
-                mark_created_item(ctx)
+            for _ = 1, n do
+                if not G:can_add_consumable() then return end
+                local tid = G:random_consumable_id_of_kind("tarot", nil, "8ba")
+                if tid then
+                    G:add_consumable(tid)
+                    mark_effect_applied(ctx)
+                    mark_created_item(ctx)
+                end
             end
         end,
     },
@@ -867,7 +892,14 @@ local SPECIAL = {
             end
         end
     },
-    j_business = { matches_trigger = function(_, e) return e == "card_played" end, apply_effect = function(_, ctx) if rank_is_face(ctx.rank) and G:do_random(1, 2, 1, "business") then add_money(ctx, 2) end end },
+    j_business = {
+        matches_trigger = function(_, e) return e == "card_played" end,
+        apply_effect = function(_, ctx)
+            if not rank_is_face(ctx.rank) then return end
+            local n = G:chance_triggers(1, 2, 1, "business")
+            if n > 0 then add_money(ctx, 2 * n) end
+        end
+    },
     j_ticket = { matches_trigger = function(_, e) return e == "card_played" end, apply_effect = function(_, ctx) local cd = ctx.card_node and ctx.card_node.card_data; if cd and cd.enhancement == "gold" then add_money(ctx, 4) end end },
     j_photograph = {
         matches_trigger = function(_, e) return e == "card_played" end,
@@ -1232,11 +1264,13 @@ local SPECIAL = {
     j_space = {
         matches_trigger = function(_, e) return e == "on_hand_played" end,
         apply_effect = function(_, ctx)
-            if not G:do_random(1, 4, 1, "space") then return end
+            local n = G:chance_triggers(1, 4, 1, "space")
             local idx = ctx and tonumber(ctx.hand_index)
-            if not G or not idx or not G.upgrade_hand_level_at_index then return end
-            if G:upgrade_hand_level_at_index(idx) then
-                mark_effect_applied(ctx)
+            if n == 0 or not G or not idx or not G.upgrade_hand_level_at_index then return end
+            for _ = 1, n do
+                if G:upgrade_hand_level_at_index(idx) then
+                    mark_effect_applied(ctx)
+                end
             end
         end
     },
@@ -1534,8 +1568,9 @@ local SPECIAL = {
         matches_trigger = function(_, e) return e == "on_booster_open" end,
         apply_effect = function(j, ctx)
             if ctx.event_name ~= "on_booster_open" then return end
-            if G:do_random(1, j.config and j.config.extra or 2, 1,
-                "halu" .. tostring(tonumber(G.ante) or 1)) then
+            local n = G:chance_triggers(1, j.config and j.config.extra or 2, 1,
+                "halu" .. tostring(tonumber(G.ante) or 1))
+            for _ = 1, n do
                 local tid = G:random_consumable_id_of_kind("tarot", nil, "hal")
                 if tid then
                     G:add_consumable(tid)
@@ -1983,7 +2018,7 @@ end
 
 --- Register the effect for a Joker id. Fails on an id the vanilla table already owns.
 ---@param id string
----@param impl table `{ matches_trigger, apply_effect, query_retrigger?, tooltip_lines? }`
+---@param impl table `{ matches_trigger, apply_effect, query_retrigger?, query_probability_retrigger?, tooltip_lines? }`
 ---@return boolean ok
 function JokerEffects.register(id, impl)
     if type(id) ~= "string" or type(impl) ~= "table" or SPECIAL[id] then return false end
@@ -2005,6 +2040,9 @@ JokerEffects.add_round_win_money = add_round_win_money
 JokerEffects.rank_is_face = rank_is_face
 JokerEffects.is_suit = is_suit
 JokerEffects.has_hand_type = has_hand_type
+--- The Joker a Blueprint or Brainstorm is copying right now (through chains), or `src` itself
+--- for any other Joker; nil when there is nothing copyable.
+JokerEffects.resolve_copy_target = resolve_copy_target
 
 function JokerEffects.begin_apply_context(ctx)
     if type(ctx) ~= "table" then return end

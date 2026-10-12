@@ -17,6 +17,7 @@ dev/.cache/
 dev/.venv/
 dev/dist/
 dev/server/
+dev/mods/
 __pycache__/
 
 # Misc
