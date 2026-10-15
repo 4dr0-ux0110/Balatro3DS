@@ -3043,7 +3043,6 @@ function Game:build_pause_focus_targets()
             for _, def in ipairs({
                 { "art_carousel", self._art_carousel_rect },
                 { "art_contrast", self._art_contrast_rect },
-                { "art_set", self._art_set_rect },
                 { "back", self._pause_back_rect },
             }) do
                 if def[2] then targets[#targets + 1] = { kind = def[1], rect = def[2] } end
@@ -3172,8 +3171,6 @@ function Game:activate_pause_focus()
         return self:art_cycle(1)
     elseif t.kind == "art_contrast" then
         return self:art_toggle_contrast()
-    elseif t.kind == "art_set" then
-        return self:art_apply()
     elseif t.kind == "skip_tutorial" then
         return self:skip_tutorial()
 
@@ -4325,18 +4322,20 @@ function Game:close_card_art_panel()
     return true
 end
 
---- Step the carousel, wrapping at both ends.
+--- Step the carousel, wrapping at both ends. The suit takes the new art straight away.
 function Game:art_cycle(delta)
     local entries = CardArt.carousel(CardArt.SUITS[self._art_suit or 1])
     local pick = (math.floor(tonumber(self._art_pick) or 1) - 1 + (delta or 1)) % #entries
     self._art_pick = pick + 1
     Sfx.play("paper1")
+    self:art_apply()
     self:art_flip_preview()
     return true
 end
 
 function Game:art_toggle_contrast()
     self._art_contrast = not self._art_contrast
+    self:art_apply()
     self:art_flip_preview()
     return true
 end
@@ -4366,21 +4365,9 @@ function Game:art_pending()
     return suit, entry.id, self._art_contrast == true
 end
 
---- Whether the pending choice differs from what the suit uses now.
-function Game:art_pending_changed()
-    local suit, collab, contrast = self:art_pending()
-    local saved = self:get_card_art(suit)
-    return saved.collab ~= collab or saved.contrast ~= contrast
-end
-
+--- Save the panel's choice for its suit.
 function Game:art_apply()
-    local suit, collab, contrast = self:art_pending()
-    if self:set_card_art(suit, collab, contrast) then
-        Sfx.play_button()
-        for _, card in ipairs(self._art_cards or {}) do
-            if card.juice_up then card:juice_up(0.3, 0.3) end
-        end
-    end
+    self:set_card_art(self:art_pending())
     return true
 end
 
@@ -8581,7 +8568,6 @@ function Game:draw_bottom_pause()
             local pick = math.max(1, math.min(#entries, self._art_pick or 1))
             local entry = entries[pick]
             local contrast = self._art_contrast == true
-            local changed = self:art_pending_changed()
 
             -- Every rect is laid out before anything draws: `is_pause_focused` rebuilds the
             -- focus list from these, and a half-built list puts the highlight on the wrong row.
@@ -8607,8 +8593,9 @@ function Game:draw_bottom_pause()
                 x = cards_x + cards_w + arrow_gap, y = self._art_prev_rect.y, w = arrow_w, h = 40,
             }
 
-            self._art_contrast_rect = { x = panel_x + 16, y = panel_y + 180, w = 150, h = 20 }
-            self._art_set_rect = { x = panel_x + panel_w - 16 - 110, y = panel_y + 180, w = 110, h = 20 }
+            self._art_contrast_rect = {
+                x = panel_x + math.floor((panel_w - 150) * 0.5 + 0.5), y = panel_y + 180, w = 150, h = 20,
+            }
             self._pause_back_rect = {
                 x = panel_x + math.floor((panel_w - 140) * 0.5 + 0.5), y = panel_y + 208, w = 140, h = 20,
             }
@@ -8638,9 +8625,8 @@ function Game:draw_bottom_pause()
             love.graphics.setColor(self.C.WHITE)
             love.graphics.printf(entry.id == nil and I18N.text("settings.art_default", nil, "Default") or entry.name,
                 panel_x, panel_y + 152, panel_w, "center")
-            love.graphics.setColor(changed and self.C.GREY or self.C.GREEN)
-            love.graphics.printf(("%d / %d  -  %s"):format(pick, #entries,
-                changed and I18N.text("settings.art_press_set", nil, "Press Set to use") or I18N.text("settings.art_in_use", nil, "In use")), panel_x, panel_y + 164, panel_w, "center")
+            love.graphics.setColor(self.C.GREY)
+            love.graphics.printf(("%d / %d"):format(pick, #entries), panel_x, panel_y + 164, panel_w, "center")
 
             -- High contrast is a checkbox: the box carries the state, the label stays put.
             local cr = self._art_contrast_rect
@@ -8659,8 +8645,6 @@ function Game:draw_bottom_pause()
             love.graphics.printf(I18N.text("settings.high_contrast", nil, "High Contrast"), bx + box + 4, cr.y + math.floor(
                 (cr.h - love.graphics.getFont():getHeight()) * 0.5 + 0.5) - 1, cr.w - box - 14, "left")
 
-            draw_btn(self._art_set_rect, I18N.text("settings.art_set", nil, "Set"), changed and self.C.GREEN or self.C.GREY,
-                is_pause_focused("art_set"))
             draw_btn(self._pause_back_rect, I18N.text("common.back", nil, "Back"), self.C.MULT, is_pause_focused("back"))
         else
             -- ===== SETTINGS GAME TAB =====
@@ -16305,10 +16289,6 @@ function Game:handle_pause_settings_touch(x, y)
                 return
             end
             if self:art_touch_preview(x, y) then return end
-            if self._art_set_rect and self:_point_in_rect_simple(x, y, self._art_set_rect) then
-                self:art_apply()
-                return
-            end
             if self._pause_back_rect and self:_point_in_rect_simple(x, y, self._pause_back_rect) then
                 self:close_card_art_panel()
                 return

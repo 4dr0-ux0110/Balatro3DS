@@ -104,24 +104,22 @@ suite.test("the old global contrast switch migrates to every suit", function()
     end
 end)
 
-suite.test("the art panel only applies its choice on Set", function()
+suite.test("the art panel applies its choice as soon as it changes", function()
     local game = bootstrap.new_game(7307)
     game.SETTINGS.CARD_ART = CardArt.default_settings()
     game:open_card_art_panel()
     game:art_select_suit(4) -- Spades
     game:art_cycle(1)
-    game._art_contrast = true
-    T.assert_true(game:art_pending_changed())
-    T.assert_eq(game:get_card_art("Spades").collab, nil, "browsing changes nothing")
-    game:art_apply()
-    T.assert_eq(game:get_card_art("Spades").collab, CardArt.COLLABS.Spades[1].id)
-    T.assert_true(game:get_card_art("Spades").contrast)
-    T.assert_false(game:art_pending_changed())
+    T.assert_eq(game:get_card_art("Spades").collab, CardArt.COLLABS.Spades[1].id, "stepping the carousel applies it")
+    T.assert_false(game:get_card_art("Spades").contrast)
+    game:art_toggle_contrast()
+    T.assert_true(game:get_card_art("Spades").contrast, "the checkbox applies too")
 
     game:art_cycle(-1)
-    T.assert_eq(game:art_pending_changed(), true)
+    T.assert_eq(game:get_card_art("Spades").collab, nil, "back to the deck's own art")
+    T.assert_eq(game:get_card_art("Hearts").collab, nil, "other suits are untouched")
     game:art_select_suit(4)
-    T.assert_false(game:art_pending_changed(), "reselecting a suit reloads its saved choice")
+    T.assert_eq(game._art_pick, 1, "reselecting a suit reloads its saved choice")
 end)
 
 suite.test("the art preview is live cards that flip to a new choice and are freed on close", function()
@@ -143,7 +141,7 @@ suite.test("the art preview is live cards that flip to a new choice and are free
     for _ = 1, 60 do jack:update(1 / 60) end
     T.assert_eq(jack.rank_atlas_name, CardArt.atlas_name("Clubs", CardArt.COLLABS.Clubs[1].id, false))
     T.assert_eq(jack.rank_index, 0)
-    T.assert_eq(game:get_card_art("Clubs").collab, nil, "the preview never changes the setting")
+    T.assert_eq(game:get_card_art("Clubs").collab, CardArt.COLLABS.Clubs[1].id, "the shown art is the one in use")
 
     game:close_card_art_panel()
     T.assert_eq(game._art_cards, nil)
