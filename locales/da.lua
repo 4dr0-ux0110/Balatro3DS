@@ -287,7 +287,7 @@ return {
     ["career.highest_ante"] = "Højeste Ante",
     ["career.most_played"] = "Mest Spillet",
     ["career.most_money"] = "Mest Penge",
-    ["career.best_streak"] = "Bedste Stime,
+    ["career.best_streak"] = "Bedste Stime",
     ["profile.career"] = "Karriere",
     ["profile.progress"] = "Fremskridt",
     ["profile.wins_prefix"] = "Sejre: ",
