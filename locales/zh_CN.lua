@@ -2,6 +2,7 @@
 return {
     ["language.en"] = "English",
     ["language.zh_CN"] = "简体中文",
+    ["language.da"] = "荷兰语",
     ["common.back"] = "返回",
     ["common.continue"] = "继续",
     ["common.none"] = "无",

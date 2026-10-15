@@ -164,4 +164,16 @@ function GameOverUI.handle_touch(game, x, y)
     return false
 end
 
+--- Same action as tapping Continue: the button stub on the panel advertises A.
+function GameOverUI.handle_button(game, btn)
+    if game.is_menu_activate and game:is_menu_activate(btn) then
+        Sfx.play_button()
+        if game.continue_from_game_over then
+            game:continue_from_game_over()
+        end
+        return true
+    end
+    return false
+end
+
 return GameOverUI

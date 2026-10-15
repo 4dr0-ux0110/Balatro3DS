@@ -6145,6 +6145,12 @@ function Game:draw_tooltips_on_top()
     if self._collection_open and self._menu_sub_state == "collection_grid" then
         return
     end
+    if self:modal_overlay_open() then
+        if self._deck_view_open then
+            DeckViewUI.draw_tooltips(self)
+        end
+        return
+    end
     -- The d-pad cursor owns the hand tooltip only while the buttons are driving. On touch the
     -- cursor is invisible, so its tooltip falls through to the per-node pass below, which draws
     -- for the card the finger actually tapped (`active_tooltip_card`).
@@ -6182,15 +6188,12 @@ function Game:draw_tooltips_on_top()
             end
         end
     end
-    if self.hand and self.hand.card_nodes and not self:modal_overlay_open() then
+    if self.hand and self.hand.card_nodes then
         for _, hn in ipairs(self.hand.card_nodes) do
             if hn and hn.draw_tooltip_overlay then
                 hn:draw_tooltip_overlay()
             end
         end
-    end
-    if self._deck_view_open then
-        DeckViewUI.draw_tooltips(self)
     end
     if self.STATE == self.STATES.BLIND_SELECT and self.active_tooltip_blind_index then
         self:_draw_blind_info_tooltip()

@@ -1,6 +1,7 @@
 return {
     ["language.en"] = "English",
     ["language.zh_CN"] = "Simplified Chinese",
+    ["language.da"] = "Dutch",
     ["common.back"] = "Back",
     ["common.continue"] = "Continue",
     ["common.none"] = "None",

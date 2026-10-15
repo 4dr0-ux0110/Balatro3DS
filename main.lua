@@ -48,6 +48,7 @@ require("challenge_catalog")
 local ModLoader = require("mod_loader")
 Loading.step(0.42)
 local YouWinUI = require "you_win"
+local GameOverUI = require "game_over_ui"
 local MainMenuUI = require "main_menu_ui"
 local ProfileUI = require "profile_ui"
 local DeckViewUI = require "deck_view_ui"
@@ -447,6 +448,13 @@ function love.gamepadpressed(_, button)
     if not G then return end
     if G.STATE == G.STATES.YOU_WIN then
         YouWinUI.handle_button(G, button)
+        return
+    end
+    if G.STATE == G.STATES.GAME_OVER then
+        -- Same mid-slide gate as the touch path: no dismissing a panel still entering.
+        if not (G.scene_transition_active and G:scene_transition_active()) then
+            GameOverUI.handle_button(G, button)
+        end
         return
     end
     if G.STATE == G.STATES.PAUSED then
