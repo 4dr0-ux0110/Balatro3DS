@@ -4,7 +4,7 @@ return {
     ["hand.five_of_a_kind"] = "Fem Ens",
     ["hand.straight_flush"] = "Lige Flush",
     ["hand.four_of_a_kind"] = "Fire Ens",
-    ["hand.full_house"] = "Full Hus",
+    ["hand.full_house"] = "Fuld Hus",
     ["hand.flush"] = "Flush",
     ["hand.straight"] = "Lige",
     ["hand.three_of_a_kind"] = "Tre Ens",
