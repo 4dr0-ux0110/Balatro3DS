@@ -92,4 +92,54 @@ suite.test("the pack hand un-deals to the deck instead of vanishing", function()
     end
 end)
 
+suite.test("skipping a pack, by B or the Skip button, feeds Red Card", function()
+    local game = open_pack(6005)
+    T.assert_true(game:add_joker_by_def("j_red_card"))
+    local red = game.jokers[#game.jokers]
+    game:skip_booster_pack()
+    T.assert_nil(game.booster_session, "the pack is closed")
+    T.assert_eq(tonumber(red.stored_mult) or 0, 3, "Red Card gains +3 Mult")
+end)
+
+suite.test("cutting a finished pack's close short is not a skip", function()
+    local game = open_pack(6006)
+    T.assert_true(game:add_joker_by_def("j_red_card"))
+    local red = game.jokers[#game.jokers]
+    game.booster_session.picks_remaining = 0
+    game:begin_booster_close()
+    game:skip_booster_pack()
+    T.assert_eq(tonumber(red.stored_mult) or 0, 0, "nothing was skipped")
+end)
+
+--- Shop focus targets laid out like the shelf: the two controls on the left, then a pack.
+local function stub_shop_targets(game)
+    local pack = { shop_booster_slot = 1 }
+    game.build_shop_focus_targets = function()
+        return {
+            { kind = "control", action = "continue", key = "continue", rect = { x = 8, y = 49, w = 74, h = 45 } },
+            { kind = "control", action = "reroll", key = "reroll", rect = { x = 8, y = 98, w = 74, h = 45 } },
+            { kind = "booster", slot = 1, node = pack, rect = { x = 200, y = 150, w = 50, h = 60 } },
+        }
+    end
+end
+
+suite.test("closing a shop pack puts the cursor on the nearest shelf item, not Next Round", function()
+    local game = bootstrap.new_game(6007)
+    game.input_mode = "gamepad"
+    game.STATE = game.STATES.SHOP
+    stub_shop_targets(game)
+    -- The bought pack sat just left of the one that is still on the shelf.
+    game:begin_booster_session(arcana_offer(), { x = 140, y = 150, w = 50, h = 60 })
+    -- Leftovers from inside the pack that used to stay lit alongside Next Round.
+    game.active_tooltip_joker = {}
+    game.active_tooltip_consumable_index = 1
+    game:skip_booster_pack()
+
+    T.assert_eq(game.STATE, game.STATES.SHOP, "back in the shop")
+    T.assert_eq(game._shop_focus_index, 3, "the remaining pack is focused")
+    T.assert_eq(game.active_shop_booster_slot, 1, "and it is the one highlighted")
+    T.assert_nil(game.active_tooltip_joker, "nothing from the pack stays highlighted")
+    T.assert_nil(game.active_tooltip_consumable_index, "nothing from the pack stays highlighted")
+end)
+
 return suite

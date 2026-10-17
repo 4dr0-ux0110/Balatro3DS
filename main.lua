@@ -530,8 +530,8 @@ function love.gamepadpressed(_, button)
         if G.handle_gamepad_booster and G:handle_gamepad_booster(button) then
             return
         end
-        if G:is_role(button, "cancel") and G.end_booster_session then
-            G:end_booster_session()
+        if G:is_role(button, "cancel") and G.skip_booster_pack then
+            G:skip_booster_pack()
         end
         return
     end

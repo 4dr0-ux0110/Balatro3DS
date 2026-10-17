@@ -13760,6 +13760,8 @@ function Game:begin_booster_session(offer, opening_origin)
     local choices = self:_booster_build_choices(offer)
     local return_state = (self.STATE ~= self.STATES.OPEN_BOOSTER) and self.STATE or self.STATES.SHOP
     self._booster_return_state = return_state
+    -- Where the pack sat on the shelf, so the cursor comes back there rather than to Next Round.
+    self._booster_return_focus_rect = (return_state == self.STATES.SHOP) and opening_origin or nil
     if #choices == 0 then
         self:set_state(return_state)
         return
@@ -13885,6 +13887,7 @@ function Game:_restore_booster_session(data)
     end
     self:_booster_destroy_choice_nodes()
     self._booster_return_state = data.return_state or self.STATES.SHOP
+    self._booster_return_focus_rect = nil
     self.booster_session = {
         pack = data.pack,
         size = data.size,
@@ -13992,12 +13995,49 @@ function Game:end_booster_session()
     self.dragging = nil
     self:reset_gamepad_nav()
     local return_state = self._booster_return_state or self.STATES.SHOP
+    local return_rect = self._booster_return_focus_rect
     self._booster_return_state = nil
+    self._booster_return_focus_rect = nil
     self:set_state(return_state)
     if return_state == self.STATES.SHOP then
         self:init_shop_gamepad_nav()
+        self:focus_shop_target_nearest(return_rect)
     end
     self:sync_shop_offer_interactivity()
+end
+
+--- Skip the open pack: what B and the Skip button both do. A pack whose last pick has been
+--- taken is already closing on its own, so cutting that hold short is not a skip and Red Card
+--- does not hear about it.
+function Game:skip_booster_pack()
+    if not self.booster_session then return end
+    if not self._booster_closing then
+        self:emit_joker_event("on_booster_skip", {})
+    end
+    self:end_booster_session()
+end
+
+--- Put the shop cursor on the target nearest `rect` (the slot a just-closed pack came from),
+--- and make it the only highlighted item: anything the pack left selected is cleared.
+---@param rect table|nil
+function Game:focus_shop_target_nearest(rect)
+    local targets = self:build_shop_focus_targets()
+    if type(rect) == "table" then
+        local cx, cy = rect.x + rect.w * 0.5, rect.y + rect.h * 0.5
+        local best_distance
+        for i, t in ipairs(targets) do
+            local r = t.rect
+            if type(r) == "table" then
+                local d = math.abs(r.x + r.w * 0.5 - cx) + math.abs(r.y + r.h * 0.5 - cy)
+                if not best_distance or d < best_distance then
+                    best_distance = d
+                    self._shop_focus_index = i
+                end
+            end
+        end
+    end
+    local target = self.input_mode ~= "touch" and self:get_shop_gamepad_focus() or nil
+    self:sync_shop_gamepad_tooltips(target)
 end
 
 --- After a tarot/spectral from an Arcana/Spectral pack: keep the preview hand in place so

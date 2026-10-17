@@ -408,14 +408,7 @@ function BoosterPackUI.try_skip_press(game, x, y)
     local r = game._booster_skip_rect
     if not r or not game:_point_in_rect_simple(x, y, r) then return false end
     Sfx.play_button()
-    if game.end_booster_session then
-        -- A pack whose last pick has already been taken is closing on its own; this press only
-        -- cuts the hold short. Nothing was skipped, so nothing hears about a skip.
-        if not game._booster_closing then
-            game:emit_joker_event("on_booster_skip",{})
-        end
-        game:end_booster_session()
-    end
+    game:skip_booster_pack()
     return true
 end
 
