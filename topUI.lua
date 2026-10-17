@@ -407,21 +407,39 @@ function TopUI:draw(screen)
             -- The reference keeps each boss debuff visible in its blind UI
             -- (`reference/Balatro/functions/UI_definitions.lua:2933-2979`). Reuse the
             -- readout's blind block so the 320x240 touch screen remains uncluttered.
+            --
+            -- Everything is placed from the dark box's interior and the faces' own heights, the
+            -- same anchors the non-boss readout below uses. Fixed offsets from the outer sign
+            -- only lined up under desktop's TTF metrics; the 3DS sheets draw smaller glyphs, so
+            -- there the text sat on the box's border and the target fell out of its foot.
+            local text_x = ix - sysDepth * textHeight
+            local small = G.FONTS.PIXEL.SMALL
+            local label = I18N.text("hud.score", nil, "Score")
+            local label_w = small:getWidth(label) + 3
+            -- The blind's target does not change while the blind is being played.
+            local bossReq = NumberFormat.format(math.floor(blind_target))
+            local req_font = Fonts.fit(G, G.FONTS.PIXEL.MEDIUM, bossReq, iw - label_w)
+
+            -- "Score" and the target share one row on the box's foot. Their cells share a
+            -- bottom edge, which lands the baselines together whatever height each sheet is.
+            local row_bottom = iy + ih + 2
+            love.graphics.setFont(small)
+            love.graphics.setColor(G.C.WHITE)
+            TextCache.print(label, text_x, row_bottom - small:getHeight())
+            love.graphics.setFont(req_font)
+            love.graphics.setColor(G.C.RED)
+            TextCache.printf(bossReq, text_x + label_w, row_bottom - req_font:getHeight(), iw - label_w, "right")
+
+            -- The ability takes the rest of the box, starting where "Score at least" does.
             local effect = G.get_boss_effect_text and G:get_boss_effect_text() or ""
-            love.graphics.setFont(G.FONTS.PIXEL.MICRO or G.FONTS.PIXEL.SMALL)
+            local effect_top = iy - 2
+            local effect_font = Fonts.fit_block(G, G.FONTS.PIXEL.MICRO or small, effect, iw,
+                row_bottom - small:getHeight() - effect_top)
+            love.graphics.setFont(effect_font)
             love.graphics.setColor(G.C.WHITE)
             -- Shaped once: a boss's debuff text is fixed for the whole blind, and a wrapped
             -- printf is 265 us against 16 for a batch that was shaped already.
-            TextCache.printf(effect, score_box_ix + 34 - sysDepth * textHeight, score_box_iy + 2, score_box_iw - 36, "left")
-            love.graphics.setFont(G.FONTS.PIXEL.SMALL)
-            love.graphics.setColor(G.C.WHITE)
-            TextCache.print(I18N.text("hud.score", nil, "Score"), score_box_ix + 34 - sysDepth * textHeight, score_box_iy + score_box_ih - 21)
-            local bossReq = NumberFormat.format(math.floor(blind_target))
-            love.graphics.setFont(Fonts.fit(G, G.FONTS.PIXEL.MEDIUM, bossReq, score_box_iw - 36))
-            love.graphics.setColor(G.C.RED)
-            -- The blind's target does not change while the blind is being played.
-            TextCache.printf(bossReq, score_box_ix + 34 - sysDepth * textHeight,
-                score_box_iy + score_box_ih - 14, score_box_iw - 36, "center")
+            TextCache.printf(effect, text_x, effect_top, iw, "left")
         else
             love.graphics.setColor(G.C.WHITE)
             love.graphics.setFont(G.FONTS.PIXEL.SMALL)

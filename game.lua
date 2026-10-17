@@ -300,6 +300,7 @@ function Game:init(seed)
     self._boss_reroll_btn_rect = nil
     self.hand_play_counts = {}
     self.blind_hand_play_counts = {}
+    self.round_hands_played = 0
     self._ante_played_card_uids = {}
     self.current_boss_blind_id = nil
     self.bosses_used_this_cycle = {}
@@ -753,10 +754,17 @@ function Game:get_effective_hands_per_round()
     hands = hands + SMODS.modifier_total(self, "hands")
     for _, j in ipairs(self.jokers or {}) do
         local id = j and j.def and j.def.id
-        if id == "j_burglar" then hands = hands + 3 end
         if id == "j_troubadour" then hands = hands - 1 end
     end
     return math.max(1, hands)
+end
+
+--- Hands spent this round, voided ones included (reference `current_round.hands_played`).
+--- The first-hand Jokers ask this rather than comparing hands left to the per-round total,
+--- which The Needle and Burglar both move.
+---@return integer
+function Game:get_round_hands_played()
+    return tonumber(self.round_hands_played) or 0
 end
 
 function Game:get_effective_discards_per_round()
@@ -2597,7 +2605,12 @@ function Game:restore_run_deck_stake_from_snapshot(snapshot)
     if type(snapshot) ~= "table" then return end
     local deck_id = snapshot.selected_deck_id
     if type(deck_id) == "string" and deck_id ~= "" then
-        self.selected_deck_id = deck_id
+        local def = DECK_DEFS_BY_ID and DECK_DEFS_BY_ID[deck_id]
+        if def and self.apply_deck_modifiers then
+            self:apply_deck_modifiers(def)
+        else
+            self.selected_deck_id = deck_id
+        end
     end
     local stake_id = snapshot.selected_stake_id
     if type(stake_id) == "string" and stake_id ~= "" then
@@ -3043,7 +3056,6 @@ function Game:build_pause_focus_targets()
             for _, def in ipairs({
                 { "art_carousel", self._art_carousel_rect },
                 { "art_contrast", self._art_contrast_rect },
-                { "art_set", self._art_set_rect },
                 { "back", self._pause_back_rect },
             }) do
                 if def[2] then targets[#targets + 1] = { kind = def[1], rect = def[2] } end
@@ -3172,8 +3184,6 @@ function Game:activate_pause_focus()
         return self:art_cycle(1)
     elseif t.kind == "art_contrast" then
         return self:art_toggle_contrast()
-    elseif t.kind == "art_set" then
-        return self:art_apply()
     elseif t.kind == "skip_tutorial" then
         return self:skip_tutorial()
 
@@ -4325,18 +4335,20 @@ function Game:close_card_art_panel()
     return true
 end
 
---- Step the carousel, wrapping at both ends.
+--- Step the carousel, wrapping at both ends. The suit takes the new art straight away.
 function Game:art_cycle(delta)
     local entries = CardArt.carousel(CardArt.SUITS[self._art_suit or 1])
     local pick = (math.floor(tonumber(self._art_pick) or 1) - 1 + (delta or 1)) % #entries
     self._art_pick = pick + 1
     Sfx.play("paper1")
+    self:art_apply()
     self:art_flip_preview()
     return true
 end
 
 function Game:art_toggle_contrast()
     self._art_contrast = not self._art_contrast
+    self:art_apply()
     self:art_flip_preview()
     return true
 end
@@ -4366,21 +4378,9 @@ function Game:art_pending()
     return suit, entry.id, self._art_contrast == true
 end
 
---- Whether the pending choice differs from what the suit uses now.
-function Game:art_pending_changed()
-    local suit, collab, contrast = self:art_pending()
-    local saved = self:get_card_art(suit)
-    return saved.collab ~= collab or saved.contrast ~= contrast
-end
-
+--- Save the panel's choice for its suit.
 function Game:art_apply()
-    local suit, collab, contrast = self:art_pending()
-    if self:set_card_art(suit, collab, contrast) then
-        Sfx.play_button()
-        for _, card in ipairs(self._art_cards or {}) do
-            if card.juice_up then card:juice_up(0.3, 0.3) end
-        end
-    end
+    self:set_card_art(self:art_pending())
     return true
 end
 
@@ -4946,6 +4946,7 @@ function Game:build_run_snapshot()
         hand_play_counts = copy_table(self.hand_play_counts or {}),
         frozen_most_played_hand_index = self.frozen_most_played_hand_index,
         blind_hand_play_counts = copy_table(self.blind_hand_play_counts or {}),
+        round_hands_played = tonumber(self.round_hands_played) or 0,
         _ante_played_card_uids = copy_table(self._ante_played_card_uids or {}),
         boss_runtime = copy_table(self.boss_runtime or {}),
         jokers_on_bottom = self.jokers_on_bottom == true,
@@ -5142,6 +5143,14 @@ function Game:load_run_snapshot(snapshot)
     self.hand_play_counts = copy_table(snapshot.hand_play_counts or {})
     self.frozen_most_played_hand_index = tonumber(snapshot.frozen_most_played_hand_index) or nil
     self.blind_hand_play_counts = copy_table(snapshot.blind_hand_play_counts or {})
+    self.round_hands_played = tonumber(snapshot.round_hands_played)
+    if not self.round_hands_played then
+        -- Saves from before the counter: the per-blind tally misses only voided hands.
+        self.round_hands_played = 0
+        for _, count in pairs(self.blind_hand_play_counts) do
+            self.round_hands_played = self.round_hands_played + (tonumber(count) or 0)
+        end
+    end
     self._ante_played_card_uids = copy_table(snapshot._ante_played_card_uids or {})
     self.boss_runtime = copy_table(snapshot.boss_runtime or {})
     self.jokers_on_bottom = snapshot.jokers_on_bottom == true
@@ -6158,6 +6167,12 @@ function Game:draw_tooltips_on_top()
     if self._collection_open and self._menu_sub_state == "collection_grid" then
         return
     end
+    if self:modal_overlay_open() then
+        if self._deck_view_open then
+            DeckViewUI.draw_tooltips(self)
+        end
+        return
+    end
     -- The d-pad cursor owns the hand tooltip only while the buttons are driving. On touch the
     -- cursor is invisible, so its tooltip falls through to the per-node pass below, which draws
     -- for the card the finger actually tapped (`active_tooltip_card`).
@@ -6195,15 +6210,12 @@ function Game:draw_tooltips_on_top()
             end
         end
     end
-    if self.hand and self.hand.card_nodes and not self:modal_overlay_open() then
+    if self.hand and self.hand.card_nodes then
         for _, hn in ipairs(self.hand.card_nodes) do
             if hn and hn.draw_tooltip_overlay then
                 hn:draw_tooltip_overlay()
             end
         end
-    end
-    if self._deck_view_open then
-        DeckViewUI.draw_tooltips(self)
     end
     if self.STATE == self.STATES.BLIND_SELECT and self.active_tooltip_blind_index then
         self:_draw_blind_info_tooltip()
@@ -8581,7 +8593,6 @@ function Game:draw_bottom_pause()
             local pick = math.max(1, math.min(#entries, self._art_pick or 1))
             local entry = entries[pick]
             local contrast = self._art_contrast == true
-            local changed = self:art_pending_changed()
 
             -- Every rect is laid out before anything draws: `is_pause_focused` rebuilds the
             -- focus list from these, and a half-built list puts the highlight on the wrong row.
@@ -8607,8 +8618,9 @@ function Game:draw_bottom_pause()
                 x = cards_x + cards_w + arrow_gap, y = self._art_prev_rect.y, w = arrow_w, h = 40,
             }
 
-            self._art_contrast_rect = { x = panel_x + 16, y = panel_y + 180, w = 150, h = 20 }
-            self._art_set_rect = { x = panel_x + panel_w - 16 - 110, y = panel_y + 180, w = 110, h = 20 }
+            self._art_contrast_rect = {
+                x = panel_x + math.floor((panel_w - 150) * 0.5 + 0.5), y = panel_y + 180, w = 150, h = 20,
+            }
             self._pause_back_rect = {
                 x = panel_x + math.floor((panel_w - 140) * 0.5 + 0.5), y = panel_y + 208, w = 140, h = 20,
             }
@@ -8638,9 +8650,8 @@ function Game:draw_bottom_pause()
             love.graphics.setColor(self.C.WHITE)
             love.graphics.printf(entry.id == nil and I18N.text("settings.art_default", nil, "Default") or entry.name,
                 panel_x, panel_y + 152, panel_w, "center")
-            love.graphics.setColor(changed and self.C.GREY or self.C.GREEN)
-            love.graphics.printf(("%d / %d  -  %s"):format(pick, #entries,
-                changed and I18N.text("settings.art_press_set", nil, "Press Set to use") or I18N.text("settings.art_in_use", nil, "In use")), panel_x, panel_y + 164, panel_w, "center")
+            love.graphics.setColor(self.C.GREY)
+            love.graphics.printf(("%d / %d"):format(pick, #entries), panel_x, panel_y + 164, panel_w, "center")
 
             -- High contrast is a checkbox: the box carries the state, the label stays put.
             local cr = self._art_contrast_rect
@@ -8659,8 +8670,6 @@ function Game:draw_bottom_pause()
             love.graphics.printf(I18N.text("settings.high_contrast", nil, "High Contrast"), bx + box + 4, cr.y + math.floor(
                 (cr.h - love.graphics.getFont():getHeight()) * 0.5 + 0.5) - 1, cr.w - box - 14, "left")
 
-            draw_btn(self._art_set_rect, I18N.text("settings.art_set", nil, "Set"), changed and self.C.GREEN or self.C.GREY,
-                is_pause_focused("art_set"))
             draw_btn(self._pause_back_rect, I18N.text("common.back", nil, "Back"), self.C.MULT, is_pause_focused("back"))
         else
             -- ===== SETTINGS GAME TAB =====
@@ -11531,6 +11540,7 @@ function Game:initialize_run_loop()
     self.current_boss_blind_id = nil
     self.hand_play_counts = {}
     self.blind_hand_play_counts = {}
+    self.round_hands_played = 0
     -- The Ox starts a run pointed at High Card (`game.lua:1964`).
     self.frozen_most_played_hand_index = nil
     self.tarots_used = 0
@@ -11751,6 +11761,7 @@ function Game:_commit_selected_blind()
     self.hands = self:get_effective_hands_per_round()
     self.discards = self:get_effective_discards_per_round()
     self.blind_hand_play_counts = {}
+    self.round_hands_played = 0
     self.round_score = 0
     self.last_hand_score = 0
     self._blind_resolution_pending = false
@@ -16305,10 +16316,6 @@ function Game:handle_pause_settings_touch(x, y)
                 return
             end
             if self:art_touch_preview(x, y) then return end
-            if self._art_set_rect and self:_point_in_rect_simple(x, y, self._art_set_rect) then
-                self:art_apply()
-                return
-            end
             if self._pause_back_rect and self:_point_in_rect_simple(x, y, self._pause_back_rect) then
                 self:close_card_art_panel()
                 return

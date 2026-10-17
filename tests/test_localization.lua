@@ -307,7 +307,13 @@ suite.test("the main menu's globe opens a language picker", function()
     -- Buttons: open, move, confirm; and B closes without changing anything.
     MainMenuUI.open_language_picker(game)
     MainMenuUI.draw_bottom(game)
-    MainMenuUI.handle_button(game, "dpup")
+    -- Walk up to English by name: how many languages sit between it and Chinese depends on
+    -- what ships, and picking whichever is one row up leaves every later test in that language.
+    local languages = I18N.available_languages()
+    for _ = 1, #languages do
+        if languages[game._language_picker_focus] == "en" then break end
+        MainMenuUI.handle_button(game, "dpup")
+    end
     MainMenuUI.handle_button(game, "a")
     T.assert_eq(I18N.get_language(), "en")
     MainMenuUI.open_language_picker(game)

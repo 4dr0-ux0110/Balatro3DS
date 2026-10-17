@@ -25,8 +25,8 @@
 ---
 --- None of this applies off-console: desktop LÖVE rasterises the `.ttf` at whatever size it is
 --- given. The per-size files do not exist there, so `font_for` falls back to the shared face at
---- the *same* size - the profile still changes the metrics, so nest previews the layout change
---- even though it cannot preview the sharpness change.
+--- the size whose glyphs and line spacing match the sheet (`Fonts.DESKTOP_MATCH`) - nest previews
+--- the layout hardware draws even though it cannot preview the sharpness change.
 local Fonts = {}
 
 local SHARED_PATH = "resources/fonts/m6x11plus.ttf"
@@ -39,6 +39,24 @@ local NATIVE_PATH_FORMAT = "resources/fonts/m6x11plus_h%d.ttf"
 --- point sizes often land on the same cell (`-s 21` and `-s 22` both give 33). Sizes outside this
 --- set cannot be rendered 1:1 on hardware no matter what is requested.
 Fonts.CELL_HEIGHTS = { 9, 13, 18, 22, 27, 33 }
+
+--- What desktop loads in place of each per-size sheet, so nest draws the glyphs hardware does.
+---
+--- A sheet's cell height is not the size of the type in it: `mkbcfnt` pads the cell, so the
+--- `h22` sheet's letters sit on a baseline at row 16 and its lines advance 19 px. Desktop LÖVE
+--- loading the `.ttf` at 22 put the baseline at 17 and advanced lines by 22, which is enough to
+--- make a layout tuned on one land in the wrong place on the other. `size` is the `.ttf` size
+--- whose ascent equals the sheet's baseline (letter widths then agree within a pixel), and
+--- `line` is the sheet's lineFeed. Both were read off the baked `.bcfnt` files (FINF lineFeed,
+--- TGLP baselinePos) and the desktop rasterizer; re-measure if PIXEL_FONT_SHEETS is retuned.
+Fonts.DESKTOP_MATCH = {
+    [9]  = { size = 9,  line = 8 },
+    [13] = { size = 13, line = 11 },
+    [18] = { size = 17, line = 16 },
+    [22] = { size = 21, line = 19 },
+    [27] = { size = 26, line = 24 },
+    [33] = { size = 32, line = 29 },
+}
 
 --- Role -> requested pixel size.
 ---
@@ -123,9 +141,9 @@ local function load_font(path, size)
 end
 
 --- Face for one role under `profile`. The native profile prefers its per-size sheet and falls back
---- to the shared face at the *same size* when that file is absent, which is every non-3DS build.
---- Falling back on size as well would make nest and hardware disagree on layout, which is the one
---- thing the fallback must not do.
+--- to the shared face when that file is absent, which is every non-3DS build - at the size and
+--- line spacing that reproduce the sheet (`Fonts.DESKTOP_MATCH`), so nest and hardware agree on
+--- layout, which is the one thing the fallback must not get wrong.
 ---@return love.Font|nil font
 ---@return boolean native True when the per-size face loaded (i.e. scale is 1.0 on hardware).
 ---@return number|nil size the size actually drawn at, when a language face raised it
@@ -143,6 +161,16 @@ function Fonts.font_for(profile, size, language)
     if profile == "native" then
         local font = load_font(string.format(NATIVE_PATH_FORMAT, size), size)
         if font then return font, true end
+        -- No sheet means desktop: draw the type the sheet would have, not the type its cell
+        -- height names.
+        local match = Fonts.DESKTOP_MATCH[size]
+        if match then
+            font = load_font(SHARED_PATH, match.size)
+            if font then
+                if font.setLineHeight then font:setLineHeight(match.line / font:getHeight()) end
+                return font, false
+            end
+        end
     end
     return load_font(SHARED_PATH, size), false
 end

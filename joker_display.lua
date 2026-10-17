@@ -743,8 +743,7 @@ DEFS.j_seance = {
 DEFS.j_sixth_sense = {
     main = function(_, ctx)
         local g = ctx.game
-        local per_round = g.get_effective_hands_per_round and g:get_effective_hands_per_round() or 4
-        if (tonumber(g.hands) or 0) ~= per_round then return 0, "spectral" end
+        if g.get_round_hands_played and g:get_round_hands_played() ~= 0 then return 0, "spectral" end
         if #ctx.played == 1 and tonumber((ctx.played[1].card_data or {}).rank) == 6 then
             return 1, "spectral"
         end
@@ -1128,8 +1127,7 @@ DEFS.j_mime = { main = function(_, ctx) return #ctx.held, "retrigger" end, note 
 -- these as an (Active!) / (Inactive) reminder and nothing else.
 DEFS.j_dna = active_def(function(_, ctx)
     local g = ctx.game
-    local per_round = g.get_effective_hands_per_round and g:get_effective_hands_per_round() or 4
-    return (tonumber(g.hands) or 0) == per_round and #ctx.played == 1
+    return (not g.get_round_hands_played or g:get_round_hands_played() == 0) and #ctx.played == 1
 end)
 
 DEFS.j_luchador = active_def(function(_, ctx)
