@@ -1347,8 +1347,7 @@ local SPECIAL = {
         apply_effect = function(_, ctx)
             if ctx.event_name ~= "on_hand_played" then return end
             if type(ctx.full_hand) ~= "table" or #ctx.full_hand ~= 1 then return end
-            local eff = G and G.get_effective_hands_per_round and G:get_effective_hands_per_round()
-            if (tonumber(G and G.hands) or 0) ~= eff - 1 then return end
+            if G:get_round_hands_played() ~= 1 then return end
 
             local node = ctx.full_hand[1]
             local cd = node and node.card_data
@@ -1375,8 +1374,7 @@ local SPECIAL = {
         apply_effect = function(_, ctx)
             if ctx.event_name ~= "on_hand_after" then return end
             if ctx.blueprint then return end
-            local eff = G and G.get_effective_hands_per_round and G:get_effective_hands_per_round() or 5
-            if (tonumber(G and G.hands) or 0) ~= eff - 1 then return end
+            if G:get_round_hands_played() ~= 1 then return end
             if type(ctx.full_hand) ~= "table" or #ctx.full_hand ~= 1 then return end
             local node = ctx.full_hand[1]
             local cd = node and node.card_data
@@ -1855,6 +1853,19 @@ local SPECIAL = {
                     mul_mult(ctx, 2)
                 end
             end
+        end
+    },
+
+    -- A blind-selected trigger, not a per-round modifier: it lands after The Needle has cut the
+    -- round to one hand, and each Blueprint or Brainstorm copying it adds its own +3
+    -- (`reference/Balatro/card.lua`, Burglar's `setting_blind`).
+    j_burglar = {
+        matches_trigger = function(_, e) return e == "on_blind_selected" end,
+        apply_effect = function(j, ctx)
+            local extra = tonumber(j and j.def and j.def.config and j.def.config.extra) or 3
+            G.hands = (tonumber(G.hands) or 0) + extra
+            G.discards = 0
+            mark_effect_applied(ctx)
         end
     },
 

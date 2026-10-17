@@ -257,6 +257,39 @@ suite.test("Splash makes every selected card score", function()
     T.assert_eq(scoring_count(h), 5, "Splash should score all five selected cards")
 end)
 
+suite.test("a Four Fingers straight flush leaves out a card in neither part", function()
+    local name, h = classify({ { 10, S }, { 2, D }, { 3, D }, { 4, D }, { 5, D } },
+        { "j_four_fingers" })
+    T.assert_eq(name, "Straight Flush", "four suited connected cards plus a kicker")
+    T.assert_eq(scoring_count(h), 4, "only the four diamonds score")
+    T.assert_false(h.card_nodes[1].counts_for_play_score, "the 10 of spades must not score")
+end)
+
+suite.test("a Four Fingers flush scores only the suited cards", function()
+    local name, h = classify({ { 2, H }, { 6, H }, { 9, H }, { 12, H }, { 7, S } },
+        { "j_four_fingers" })
+    T.assert_eq(name, "Flush", "four hearts and a spade")
+    T.assert_eq(scoring_count(h), 4, "the spade is a kicker")
+    T.assert_false(h.card_nodes[5].counts_for_play_score, "the 7 of spades must not score")
+end)
+
+suite.test("a Four Fingers straight scores only the run", function()
+    local name, h = classify({ { 2, H }, { 3, C }, { 4, D }, { 5, S }, { 12, H } },
+        { "j_four_fingers" })
+    T.assert_eq(name, "Straight", "2-3-4-5 and a queen")
+    T.assert_eq(scoring_count(h), 4, "the queen is a kicker")
+    T.assert_false(h.card_nodes[5].counts_for_play_score, "the queen must not score")
+end)
+
+suite.test("a Four Fingers straight flush scores the union of its straight and flush", function()
+    -- The straight is 2-3-4-5, the flush the four hearts; the 9 of hearts is only in the flush
+    -- and the 5 of clubs only in the straight, so all five score.
+    local name, h = classify({ { 2, H }, { 3, H }, { 4, H }, { 5, C }, { 9, H } },
+        { "j_four_fingers" })
+    T.assert_eq(name, "Straight Flush", "a flush and a straight from overlapping cards")
+    T.assert_eq(scoring_count(h), 5, "every card is in one part or the other")
+end)
+
 suite.test("a stone card always scores", function()
     -- Stone cards score regardless of whether they are part of the scoring hand.
     local _, h = classify({ { 13, H }, { 13, C }, { 7, D, "stone" }, { 9, S }, { 2, H } })

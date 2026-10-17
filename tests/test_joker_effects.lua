@@ -23,7 +23,7 @@ bootstrap.load()
 --- and so on). Anything that drops out of joker_effects and is not on this list is a
 --- regression.
 local PASSIVE_JOKERS = {
-    j_astronomer = true, j_burglar = true, j_chaos = true, j_chicot = true,
+    j_astronomer = true, j_chaos = true, j_chicot = true,
     j_credit_card = true, j_drunkard = true, j_four_fingers = true, j_juggler = true,
     j_luchador = true, j_merry_andy = true, j_mr_bones = true, j_oops = true,
     j_pareidolia = true, j_ring_master = true, j_shortcut = true, j_smeared = true,
@@ -684,7 +684,9 @@ suite.test("DNA readiness pulse uses real time and stops after the first hand", 
     dna:update_ready_pulse(game.real_dt)
     T.assert_eq(pulses, 2, "repeats after 0.8 real seconds")
 
+    -- What `Hand:play_selected` does when the hand is spent.
     game.hands = game.hands - 1
+    game.round_hands_played = game.round_hands_played + 1
     dna:update_ready_pulse(0.8)
     T.assert_eq(pulses, 2, "playing the first hand disarms DNA")
     T.assert_true(dna._ready_pulse_active == nil, "pulse loop stopped")

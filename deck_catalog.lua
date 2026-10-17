@@ -307,49 +307,37 @@ for _, s in ipairs(STAKE_DEFS) do
     STAKE_DEFS_BY_ID[s.id] = s
 end
 
+--- Set every lasting deck modifier from `def`, clearing whatever the previous run's deck
+--- left behind. Safe to call again when a saved run is loaded.
+---@param def table a `DECK_DEFS` entry
+function Game:apply_deck_modifiers(def)
+    local cfg = def.config or {}
+    self.selected_deck_id = def.id
+    self.deck_hands = tonumber(cfg.hands) or 0
+    self.deck_discards = tonumber(cfg.discards) or 0
+    self.extra_hand_bonus = tonumber(cfg.extra_hand_bonus) or 0
+    self.extra_discard_bonus = tonumber(cfg.extra_discard_bonus) or 0
+    self.deck_hand_size = tonumber(cfg.hand_size) or 0
+    self.deck_consumable_slots = tonumber(cfg.consumable_slots) or 0
+    self._deck_no_interest = cfg.no_interest == true
+    self.deck_joker_slots = tonumber(cfg.joker_slots) or 0
+    self.deck_spectral_rate = tonumber(cfg.spectral_rate) or 0
+    self._deck_special = def.special or nil
+end
+
 function Game:apply_deck_config(deck_id)
     local def = DECK_DEFS_BY_ID[deck_id or "b_red"]
     if not def then def = DECK_DEFS[1] end
 
-    self.selected_deck_id = def.id
     local cfg = def.config or {}
-
-    self.deck_hands = (tonumber(cfg.hands) or 0)
-    self.deck_discards = (tonumber(cfg.discards) or 0)
-
+    self:apply_deck_modifiers(def)
 
     if (tonumber(cfg.dollars) or 0) ~= 0 then
         self.money = math.max(0, (tonumber(self.money) or 0) + (tonumber(cfg.dollars) or 0))
     end
 
-    if (tonumber(cfg.extra_hand_bonus) or 0) ~= 0 then
-        self.extra_hand_bonus = (tonumber(cfg.extra_hand_bonus) or 0)
-    end
-
-    if (tonumber(cfg.extra_discard_bonus) or 0) ~= 0 then
-        self.extra_discard_bonus = (tonumber(cfg.extra_discard_bonus) or 0)
-    end
-
-    if (tonumber(cfg.hand_size) or 0) ~= 0 then
-        self.deck_hand_size = (tonumber(cfg.hand_size) or 0)
-    end
-
-    if (tonumber(cfg.consumable_slots) or 0) ~= 0 then
-        self.deck_consumable_slots = (tonumber(cfg.consumable_slots) or 0)
-    end
-
-    if cfg.no_interest then
-        self._deck_no_interest = true
-    end
-
-    if (tonumber(cfg.joker_slots) or 0) ~= 0 then
-        self.deck_joker_slots = (tonumber(cfg.joker_slots) or 0)
-        self:refresh_joker_capacity_from_negatives()
-    end
-
-    if (tonumber(cfg.spectral_rate) or 0) ~= 0 then
-        self.deck_spectral_rate = (tonumber(cfg.spectral_rate) or 0)
-    end
+    self:refresh_joker_capacity_from_negatives()
+    self:refresh_consumable_capacity_from_negatives()
 
     if def.special == "erratic" then
         self:_apply_erratic_deck()
@@ -376,7 +364,6 @@ function Game:apply_deck_config(deck_id)
         end
     end
 
-    self._deck_special = def.special or nil
     if self.refresh_playing_card_backs then
         self:refresh_playing_card_backs()
     end

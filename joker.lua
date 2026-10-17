@@ -1287,8 +1287,7 @@ end
 function Joker:is_ready_to_use()
     local kind = self:ready_pulse_kind()
     if kind == "first_hand" then
-        local total = G and G.get_effective_hands_per_round and G:get_effective_hands_per_round()
-        return total ~= nil and tonumber(G.hands) == total
+        return G ~= nil and G.get_round_hands_played ~= nil and G:get_round_hands_played() == 0
     elseif kind == "first_discard" then
         local total = G and G.get_effective_discards_per_round and G:get_effective_discards_per_round()
         return total ~= nil and tonumber(G.discards) == total

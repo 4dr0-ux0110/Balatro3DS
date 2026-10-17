@@ -300,6 +300,7 @@ function Game:init(seed)
     self._boss_reroll_btn_rect = nil
     self.hand_play_counts = {}
     self.blind_hand_play_counts = {}
+    self.round_hands_played = 0
     self._ante_played_card_uids = {}
     self.current_boss_blind_id = nil
     self.bosses_used_this_cycle = {}
@@ -753,10 +754,17 @@ function Game:get_effective_hands_per_round()
     hands = hands + SMODS.modifier_total(self, "hands")
     for _, j in ipairs(self.jokers or {}) do
         local id = j and j.def and j.def.id
-        if id == "j_burglar" then hands = hands + 3 end
         if id == "j_troubadour" then hands = hands - 1 end
     end
     return math.max(1, hands)
+end
+
+--- Hands spent this round, voided ones included (reference `current_round.hands_played`).
+--- The first-hand Jokers ask this rather than comparing hands left to the per-round total,
+--- which The Needle and Burglar both move.
+---@return integer
+function Game:get_round_hands_played()
+    return tonumber(self.round_hands_played) or 0
 end
 
 function Game:get_effective_discards_per_round()
@@ -2597,7 +2605,12 @@ function Game:restore_run_deck_stake_from_snapshot(snapshot)
     if type(snapshot) ~= "table" then return end
     local deck_id = snapshot.selected_deck_id
     if type(deck_id) == "string" and deck_id ~= "" then
-        self.selected_deck_id = deck_id
+        local def = DECK_DEFS_BY_ID and DECK_DEFS_BY_ID[deck_id]
+        if def and self.apply_deck_modifiers then
+            self:apply_deck_modifiers(def)
+        else
+            self.selected_deck_id = deck_id
+        end
     end
     local stake_id = snapshot.selected_stake_id
     if type(stake_id) == "string" and stake_id ~= "" then
@@ -4933,6 +4946,7 @@ function Game:build_run_snapshot()
         hand_play_counts = copy_table(self.hand_play_counts or {}),
         frozen_most_played_hand_index = self.frozen_most_played_hand_index,
         blind_hand_play_counts = copy_table(self.blind_hand_play_counts or {}),
+        round_hands_played = tonumber(self.round_hands_played) or 0,
         _ante_played_card_uids = copy_table(self._ante_played_card_uids or {}),
         boss_runtime = copy_table(self.boss_runtime or {}),
         jokers_on_bottom = self.jokers_on_bottom == true,
@@ -5129,6 +5143,14 @@ function Game:load_run_snapshot(snapshot)
     self.hand_play_counts = copy_table(snapshot.hand_play_counts or {})
     self.frozen_most_played_hand_index = tonumber(snapshot.frozen_most_played_hand_index) or nil
     self.blind_hand_play_counts = copy_table(snapshot.blind_hand_play_counts or {})
+    self.round_hands_played = tonumber(snapshot.round_hands_played)
+    if not self.round_hands_played then
+        -- Saves from before the counter: the per-blind tally misses only voided hands.
+        self.round_hands_played = 0
+        for _, count in pairs(self.blind_hand_play_counts) do
+            self.round_hands_played = self.round_hands_played + (tonumber(count) or 0)
+        end
+    end
     self._ante_played_card_uids = copy_table(snapshot._ante_played_card_uids or {})
     self.boss_runtime = copy_table(snapshot.boss_runtime or {})
     self.jokers_on_bottom = snapshot.jokers_on_bottom == true
@@ -11518,6 +11540,7 @@ function Game:initialize_run_loop()
     self.current_boss_blind_id = nil
     self.hand_play_counts = {}
     self.blind_hand_play_counts = {}
+    self.round_hands_played = 0
     -- The Ox starts a run pointed at High Card (`game.lua:1964`).
     self.frozen_most_played_hand_index = nil
     self.tarots_used = 0
@@ -11738,6 +11761,7 @@ function Game:_commit_selected_blind()
     self.hands = self:get_effective_hands_per_round()
     self.discards = self:get_effective_discards_per_round()
     self.blind_hand_play_counts = {}
+    self.round_hands_played = 0
     self.round_score = 0
     self.last_hand_score = 0
     self._blind_resolution_pending = false
