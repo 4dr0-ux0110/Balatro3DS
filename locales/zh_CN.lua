@@ -1,6 +1,7 @@
 --- Thanks to @Fussyzhy
 return {
     ["language.en"] = "English",
+    ["language.es"] = "Spanish",
     ["language.zh_CN"] = "简体中文",
     ["language.da"] = "荷兰语",
     ["common.back"] = "返回",
