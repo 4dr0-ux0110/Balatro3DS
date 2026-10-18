@@ -432,6 +432,9 @@ function love.gamepadpressed(_, button)
         -- Cancel's hand gestures (tap to deselect or sort, hold to sweep) are decided here,
         -- while the button is going down and before any handler can move the focus.
         if role == "cancel" then
+            -- Where the press began: B that skips a pack lands in the shop still held, and
+            -- its release must not read as the hold that leaves the shop.
+            G._cancel_press_state = G.STATE
             G._sweep_seeded = false
             G._cancel_gesture_armed = G.hand_cancel_gesture_available
                 and G:hand_cancel_gesture_available() or false
@@ -555,6 +558,7 @@ function love.gamepadreleased(_, button)
     if ScreenWipe.active(G) then
         G._sweep_seeded = false
         G._cancel_gesture_armed = false
+        G._cancel_press_state = nil
         set_role_hold_from_button(G, button, false)
         return
     end
@@ -574,7 +578,9 @@ function love.gamepadreleased(_, button)
         G._cancel_gesture_armed = false
 
         local hold_threshold = InputBindings.GESTURES.shop_exit_hold_ms / 1000
-        if G.STATE == G.STATES.SHOP and held and held >= hold_threshold
+        local began_in_shop = G._cancel_press_state == G.STATES.SHOP
+        G._cancel_press_state = nil
+        if G.STATE == G.STATES.SHOP and began_in_shop and held and held >= hold_threshold
             and G.get_gamepad_focus_layer and G:get_gamepad_focus_layer() == "hand" then
             G:continue_from_shop()
         end

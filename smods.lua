@@ -286,8 +286,8 @@ function SMODS.build_context(event_name, ctx, joker)
     end
     if kind == "discard" then c.other_card = refresh_card_view(ctx.card_node) end
     if kind == "selling_card" then
-        c.card = ctx.joker
-        c.selling_self = ctx.joker == joker
+        c.card = ctx.joker or ctx.consumable
+        c.selling_self = ctx.joker ~= nil and ctx.joker == joker
     end
     if kind == "end_of_round" and ctx.game_over ~= nil then c.game_over = ctx.game_over == true end
     -- Contexts whose flag carries a value rather than `true`.

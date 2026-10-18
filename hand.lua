@@ -1114,6 +1114,76 @@ function Hand:discard_card_at_index(index, opts)
     return self:remove_card_at_index(index)
 end
 
+--- The Hook's forced discard: the cards at `indices` leave as one discard, the way the
+--- reference highlights both and runs `discard_cards_from_highlighted` once (`blind.lua`).
+--- Left to right, each card is on the discard pile before the jokers hear about it, every
+--- card's event carries the whole discard, and only the last is `is_last` -- so Green Joker
+--- loses one Mult per Hook rather than one per card, and Trading Card sees a one-card discard
+--- only when one card was left to take. Discarded, not destroyed: no `on_destroy`.
+---@param indices integer[]
+---@return integer removed
+function Hand:discard_cards_by_hook(indices)
+    if not self.game then return 0 end
+    local picked = {}
+    for _, i in ipairs(indices or {}) do
+        if self.card_nodes[i] and self.cards[i] then picked[#picked + 1] = i end
+    end
+    table.sort(picked)
+    local nodes, cards = {}, {}
+    for _, i in ipairs(picked) do
+        nodes[#nodes + 1] = self.card_nodes[i]
+        cards[#cards + 1] = self.cards[i]
+    end
+    if #nodes == 0 then return 0 end
+
+    local deck = self.game.deck
+    for _, cd in ipairs(cards) do
+        if deck and deck.push_discard then deck:push_discard(cd) end
+    end
+    if self.game.emit_joker_event then
+        for k, node in ipairs(nodes) do
+            local ctx = {
+                event = "on_discard",
+                event_name = "on_discard",
+                discarded_nodes = nodes,
+                discarded_cards = cards,
+                discard_reason = "discard",
+                hook = true,
+                card_node = node,
+                card = cards[k],
+                card_index = k,
+                is_last = (k == #nodes),
+            }
+            -- The card's own seal fires first, and it fires at all: the reference's forced
+            -- discard reaches `calculate_seal{discard = true}` (`state_events.lua:400`), so a
+            -- Purple Seal makes its Tarot whether the player chose the discard or The Hook did.
+            -- No `pre_discard` batch: the only joker on it, Burnt, explicitly ignores The Hook.
+            if node.emit_hand_event then node:emit_hand_event("on_discard", ctx) end
+            self.game:emit_joker_event("on_discard", ctx)
+        end
+    end
+
+    local gone = {}
+    for _, node in ipairs(nodes) do gone[node] = true end
+    for i = #self.card_nodes, 1, -1 do
+        local node = self.card_nodes[i]
+        if gone[node] then
+            for s = #self.selected, 1, -1 do
+                if self.selected[s] == node then table.remove(self.selected, s) end
+            end
+            node.selected = false
+            self.game:remove(node)
+            table.remove(self.cards, i)
+            table.remove(self.card_nodes, i)
+            if self.game.active_tooltip_card == node then self.game.active_tooltip_card = nil end
+        end
+    end
+    self:layout(false)
+    if self.game.restore_hand_draw_order then self.game:restore_hand_draw_order() end
+    self:calculate_play()
+    return #nodes
+end
+
 --- Remove a card from the hand by index without sending it to the discard pile (destroyed / gone from the run).
 ---@param index integer
 ---@return boolean

@@ -1093,6 +1093,9 @@ function TopUI:update_counters(dt)
         local levelup = G._hand_levelup
         if levelup then
             hand_name = levelup.hand or false
+        elseif G.selectedHandHidden == true then
+            -- Stays put while hidden: a pop as the selection changes type would give it away.
+            hand_name = "???"
         elseif G.selectedHand and G.selectedHand ~= -1 and G.handlist then
             hand_name = G.handlist[G.selectedHand] or false
         end

@@ -140,8 +140,19 @@ local function rank_is_odd(rank)
 end
 
 --- Suit match; with Smeared Joker, Hearts↔Diamonds and Spades↔Clubs count as the same.
-local function is_suit(suit, check)
-    if suit == nil or check == nil then return false end
+--- Does a card count as `check`? `card` is a card node, its card data, or a bare suit string.
+--- Given the card, a Wild Card is every suit and a Stone Card none, as `Card:is_suit` has it
+--- (`reference/Balatro/card.lua`); a bare suit only knows its printed suit.
+local function is_suit(card, check)
+    if card == nil or check == nil then return false end
+    local suit = card
+    if type(card) == "table" then
+        local data = card.card_data or card
+        if data.enhancement == "stone" then return false end
+        if data.enhancement == "wild" then return true end
+        suit = data.suit
+        if suit == nil then return false end
+    end
     local smeared = G and G.hasJoker and G:hasJoker("j_smeared")
     if smeared then
         if check == "Hearts" or check == "Diamonds" then
@@ -151,6 +162,37 @@ local function is_suit(suit, check)
         end
     end
     return suit == check
+end
+
+--- The card a `card_played` / `card_held` context is about, for `is_suit`.
+local function ctx_card(ctx)
+    return ctx.card_node or ctx.suit
+end
+
+--- Fill one suit per card the way Flower Pot and Seeing Double do: non-Wild cards first, each
+--- taking the first still-empty suit of `order` it counts as, then the Wild Cards in
+--- `wild_order`. So a Smeared Spade and Club fill Spades and Clubs, not both suits twice
+--- (`reference/Balatro/card.lua`, `Flower Pot` / `Seeing Double`).
+---@return table<string, boolean>
+local function fill_suits(cards, order, wild_order)
+    local filled = {}
+    local function place(card, suits)
+        for _, s in ipairs(suits) do
+            if not filled[s] and is_suit(card, s) then
+                filled[s] = true
+                return
+            end
+        end
+    end
+    for _, card in ipairs(cards or {}) do
+        local data = card and (card.card_data or card)
+        if data and data.enhancement ~= "wild" then place(card, order) end
+    end
+    for _, card in ipairs(cards or {}) do
+        local data = card and (card.card_data or card)
+        if data and data.enhancement == "wild" then place(card, wild_order) end
+    end
+    return filled
 end
 
 local function discarded_card_is_debuffed(ctx, index, card)
@@ -331,19 +373,19 @@ local SPECIAL = {
     },
     j_greedy_joker = {
         matches_trigger = function(_, e) return e == "card_played" end,
-        apply_effect = function(_, ctx) if is_suit(ctx.suit, "Diamonds") then add_mult(ctx, 3) end end,
+        apply_effect = function(_, ctx) if is_suit(ctx_card(ctx), "Diamonds") then add_mult(ctx, 3) end end,
     },
     j_lusty_joker = {
         matches_trigger = function(_, e) return e == "card_played" end,
-        apply_effect = function(_, ctx) if is_suit(ctx.suit, "Hearts") then add_mult(ctx, 3) end end,
+        apply_effect = function(_, ctx) if is_suit(ctx_card(ctx), "Hearts") then add_mult(ctx, 3) end end,
     },
     j_wrathful_joker = {
         matches_trigger = function(_, e) return e == "card_played" end,
-        apply_effect = function(_, ctx) if is_suit(ctx.suit, "Spades") then add_mult(ctx, 3) end end,
+        apply_effect = function(_, ctx) if is_suit(ctx_card(ctx), "Spades") then add_mult(ctx, 3) end end,
     },
     j_gluttenous_joker = {
         matches_trigger = function(_, e) return e == "card_played" end,
-        apply_effect = function(_, ctx) if is_suit(ctx.suit, "Clubs") then add_mult(ctx, 3) end end,
+        apply_effect = function(_, ctx) if is_suit(ctx_card(ctx), "Clubs") then add_mult(ctx, 3) end end,
     },
     j_jolly = {
         matches_trigger = function(_, e) return e == "on_hand_scored" end,
@@ -814,13 +856,13 @@ local SPECIAL = {
             if r == 14 or r == 2 or r == 3 or r == 5 or r == 8 then add_mult(ctx, 8) end
         end
     },
-    j_rough_gem = { matches_trigger = function(_, e) return e == "card_played" end, apply_effect = function(_, ctx) if is_suit(ctx.suit, "Diamonds") then add_money(ctx, 1) end end },
-    j_arrowhead = { matches_trigger = function(_, e) return e == "card_played" end, apply_effect = function(_, ctx) if is_suit(ctx.suit, "Spades") then add_chips(ctx, 50) end end },
-    j_onyx_agate = { matches_trigger = function(_, e) return e == "card_played" end, apply_effect = function(_, ctx) if is_suit(ctx.suit, "Clubs") then add_mult(ctx, 7) end end },
+    j_rough_gem = { matches_trigger = function(_, e) return e == "card_played" end, apply_effect = function(_, ctx) if is_suit(ctx_card(ctx), "Diamonds") then add_money(ctx, 1) end end },
+    j_arrowhead = { matches_trigger = function(_, e) return e == "card_played" end, apply_effect = function(_, ctx) if is_suit(ctx_card(ctx), "Spades") then add_chips(ctx, 50) end end },
+    j_onyx_agate = { matches_trigger = function(_, e) return e == "card_played" end, apply_effect = function(_, ctx) if is_suit(ctx_card(ctx), "Clubs") then add_mult(ctx, 7) end end },
     j_bloodstone = {
         matches_trigger = function(_, e) return e == "card_played" end,
         apply_effect = function(_, ctx)
-            if not is_suit(ctx.suit, "Hearts") then return end
+            if not is_suit(ctx_card(ctx), "Hearts") then return end
             local n = G:chance_triggers(1, 2, 1, "bloodstone")
             if n > 0 then mul_mult(ctx, 1.5 ^ n) end
         end
@@ -877,16 +919,8 @@ local SPECIAL = {
     j_flower_pot = {
         matches_trigger = function(_, e) return e == "on_hand_scored" end,
         apply_effect = function(_, ctx)
-            local has = { Hearts = false, Clubs = false, Diamonds = false, Spades = false }
-            for _, n in ipairs((ctx and ctx.cards) or {}) do
-                local s = n and n.card_data and n.card_data.suit
-                if s then
-                    if is_suit(s, "Hearts") then has.Hearts = true end
-                    if is_suit(s, "Clubs") then has.Clubs = true end
-                    if is_suit(s, "Diamonds") then has.Diamonds = true end
-                    if is_suit(s, "Spades") then has.Spades = true end
-                end
-            end
+            local order = { "Hearts", "Diamonds", "Spades", "Clubs" }
+            local has = fill_suits(ctx and ctx.cards, order, order)
             if has.Hearts and has.Clubs and has.Diamonds and has.Spades then
                 mul_mult(ctx, 3)
             end
@@ -923,7 +957,7 @@ local SPECIAL = {
         apply_effect = function(_, ctx)
             local cards = held_cards(ctx)
             for _, c in ipairs(cards) do
-                if not is_suit(c.suit, "Spades") and not is_suit(c.suit, "Clubs") then return end
+                if not is_suit(c, "Spades") and not is_suit(c, "Clubs") then return end
             end
             mul_mult(ctx, 3)
         end
@@ -1024,7 +1058,9 @@ local SPECIAL = {
         matches_trigger = function(_, e, ctx) return e == "on_discard" and ctx.discard_reason == "discard" end,
         apply_effect = function(_, ctx)
             if ctx.blueprint then return end
-            local discardCount = G:get_effective_discards_per_round() - 1
+            -- Only the round's first discard. A manual one has already spent its discard by now;
+            -- The Hook's spends none, so it counts while no discard has been used.
+            local discardCount = G:get_effective_discards_per_round() - (ctx.hook and 0 or 1)
             local discarded = ctx.discarded_cards
             if type(discarded) ~= "table" or #discarded ~= 1 or discardCount ~= G.discards then return end
             local deck = G and G.deck
@@ -1044,7 +1080,7 @@ local SPECIAL = {
     j_ancient_joker = {
         matches_trigger = function(_,e) return e == "card_played" or e == "on_round_end" end,
         apply_effect = function(j, ctx)
-            if ctx.event_name == "card_played" and is_suit(ctx.suit, j.random_suit) then
+            if ctx.event_name == "card_played" and is_suit(ctx_card(ctx), j.random_suit) then
                 mul_mult(ctx, 1.5)
             elseif ctx.event_name == "on_round_end" then
                 if G and G.set_joker_shared_picks then
@@ -1159,7 +1195,7 @@ local SPECIAL = {
                 -- (reference/Balatro/card.lua:2814-2823).
                 local c = ctx.card
                 if c and not discarded_card_is_debuffed(ctx, ctx.card_index, c)
-                    and is_suit(c.suit, j.random_suit) then
+                    and is_suit(c, j.random_suit) then
                     j.runtime_counter = (tonumber(j.runtime_counter) or 0) + 3
                     mark_effect_applied(ctx)
                 end
@@ -1708,7 +1744,7 @@ local SPECIAL = {
                 if j.random_rank == nil or j.random_suit == nil then return end
                 local cr = tonumber(ctx.rank)
                 local jr = tonumber(j.random_rank)
-                if cr == jr and is_suit(ctx.suit, j.random_suit) then
+                if cr == jr and is_suit(ctx_card(ctx), j.random_suit) then
                     -- X2, per the reference's `j_idol config = {extra = 2}`.
                     mul_mult(ctx, 2)
                 end
@@ -1838,18 +1874,11 @@ local SPECIAL = {
         matches_trigger = function(_, e) return e == "on_hand_scored" end,
         apply_effect = function(j, ctx)
             if ctx.event_name == "on_hand_scored" then
-                cards = ctx.cards
-                local hasClubs = false
-                local hasOther = false
-                for _, card in ipairs(cards) do
-                    local s = card and card.card_data and card.card_data.suit
-                    if is_suit(s, "Clubs") then
-                        hasClubs = true
-                    else
-                        hasOther = true
-                    end
-                end
-                if hasClubs and hasOther then
+                -- A Wild Card fills Clubs first, since that is the suit this one needs.
+                local has = fill_suits(ctx.cards,
+                    { "Hearts", "Diamonds", "Spades", "Clubs" },
+                    { "Clubs", "Diamonds", "Spades", "Hearts" })
+                if has.Clubs and (has.Hearts or has.Diamonds or has.Spades) then
                     mul_mult(ctx, 2)
                 end
             end

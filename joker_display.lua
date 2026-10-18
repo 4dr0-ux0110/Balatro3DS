@@ -196,10 +196,19 @@ local function joker_owned(g, id)
     return g ~= nil and g.hasJoker ~= nil and g:hasJoker(id)
 end
 
---- Suit match, with Smeared Joker collapsing Hearts/Diamonds and Spades/Clubs
+--- Suit match, with Smeared Joker collapsing Hearts/Diamonds and Spades/Clubs, a Wild Card
+--- every suit and a Stone Card none. `card` is a node, its card data, or a bare suit
 --- (`joker_effects.lua`'s `is_suit`, kept in step with it).
-local function is_suit(g, suit, check)
-    if suit == nil or check == nil then return false end
+local function is_suit(g, card, check)
+    if card == nil or check == nil then return false end
+    local suit = card
+    if type(card) == "table" then
+        local data = card.card_data or card
+        if data.enhancement == "stone" then return false end
+        if data.enhancement == "wild" then return true end
+        suit = data.suit
+        if suit == nil then return false end
+    end
     if joker_owned(g, "j_smeared") then
         if check == "Hearts" or check == "Diamonds" then
             return suit == "Hearts" or suit == "Diamonds"
@@ -208,6 +217,26 @@ local function is_suit(g, suit, check)
         end
     end
     return suit == check
+end
+
+--- One suit per card, non-Wild cards first (`joker_effects.lua`'s `fill_suits`).
+local function fill_suits(g, nodes, order, wild_order)
+    local filled = {}
+    local function place(node, suits)
+        for _, s in ipairs(suits) do
+            if not filled[s] and is_suit(g, node, s) then
+                filled[s] = true
+                return
+            end
+        end
+    end
+    for _, node in ipairs(nodes or {}) do
+        if (node.card_data or {}).enhancement ~= "wild" then place(node, order) end
+    end
+    for _, node in ipairs(nodes or {}) do
+        if (node.card_data or {}).enhancement == "wild" then place(node, wild_order) end
+    end
+    return filled
 end
 
 local function rank_is_face(g, rank)
@@ -385,7 +414,7 @@ local function suit_def(suit, amount, kind)
         main = function(joker, ctx)
             local n = tonumber(extra_of(joker).s_mult) or tonumber(extra_of(joker).s_chips) or amount
             return sum_scoring(ctx, function(_, data)
-                return is_suit(ctx.game, data.suit, suit) and n or 0
+                return is_suit(ctx.game, data, suit) and n or 0
             end), kind
         end,
         note = note_text(suit, "suit_" .. suit),
@@ -541,7 +570,7 @@ DEFS.j_ancient_joker = {
         local x = 1
         if type(suit) == "string" then
             for _, node in ipairs(ctx.scoring) do
-                if is_suit(ctx.game, (node.card_data or {}).suit, suit) then
+                if is_suit(ctx.game, node, suit) then
                     for _ = 1, card_triggers(ctx, node) do x = x * 1.5 end
                 end
             end
@@ -562,7 +591,7 @@ DEFS.j_idol = {
         if r and type(s) == "string" then
             for _, node in ipairs(ctx.scoring) do
                 local data = node.card_data or {}
-                if tonumber(data.rank) == r and is_suit(ctx.game, data.suit, s) then
+                if tonumber(data.rank) == r and is_suit(ctx.game, data, s) then
                     for _ = 1, card_triggers(ctx, node) do x = x * 2 end
                 end
             end
@@ -600,7 +629,7 @@ end
 -- slot the odds win: which cards are being counted is legible from the count itself moving as you
 -- select, whereas nothing else on screen says the payout is a coin flip.
 DEFS.j_bloodstone = chance_def("X1.5", 2, function(g, data)
-    return is_suit(g, data.suit, "Hearts")
+    return is_suit(g, data, "Hearts")
 end)
 DEFS.j_business = chance_def("$2", 2, function(g, data)
     return rank_is_face(g, data.rank)
@@ -685,8 +714,7 @@ DEFS.j_raised_fist = {
 DEFS.j_blackboard = {
     main = function(_, ctx)
         for _, node in ipairs(ctx.held) do
-            local s = (node.card_data or {}).suit
-            if not is_suit(ctx.game, s, "Spades") and not is_suit(ctx.game, s, "Clubs") then
+            if not is_suit(ctx.game, node, "Spades") and not is_suit(ctx.game, node, "Clubs") then
                 return 1, "xmult"
             end
         end
@@ -697,15 +725,8 @@ DEFS.j_blackboard = {
 -- Whole-hand conditions.
 DEFS.j_flower_pot = {
     main = function(_, ctx)
-        local has = { Hearts = false, Clubs = false, Diamonds = false, Spades = false }
-        for _, node in ipairs(ctx.scoring) do
-            local s = (node.card_data or {}).suit
-            if s then
-                for suit in pairs(has) do
-                    if is_suit(ctx.game, s, suit) then has[suit] = true end
-                end
-            end
-        end
+        local order = { "Hearts", "Diamonds", "Spades", "Clubs" }
+        local has = fill_suits(ctx.game, ctx.scoring, order, order)
         if has.Hearts and has.Clubs and has.Diamonds and has.Spades then return 3, "xmult" end
         return 1, "xmult"
     end,
@@ -714,11 +735,10 @@ DEFS.j_flower_pot = {
 
 DEFS.j_seeing_double = {
     main = function(_, ctx)
-        local clubs, other = false, false
-        for _, node in ipairs(ctx.scoring) do
-            if is_suit(ctx.game, (node.card_data or {}).suit, "Clubs") then clubs = true else other = true end
-        end
-        return (clubs and other) and 2 or 1, "xmult"
+        local has = fill_suits(ctx.game, ctx.scoring,
+            { "Hearts", "Diamonds", "Spades", "Clubs" }, { "Clubs", "Diamonds", "Spades", "Hearts" })
+        local other = has.Hearts or has.Diamonds or has.Spades
+        return (has.Clubs and other) and 2 or 1, "xmult"
     end,
     note = note_text("Club+other"),
 }

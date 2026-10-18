@@ -556,7 +556,7 @@ local function draw_debuff_x_overlay(draw_x, draw_y, w, h)
     local y2 = draw_y + h - inset
     local prev_w = love.graphics.getLineWidth()
     love.graphics.setLineWidth(DEBUFF_X_WIDTH)
-    love.graphics.setColor(0.95, 0.2, 0.2, 0.95)
+    love.graphics.setColor(1, 0.2, 0.2, 0.65)
     love.graphics.line(x1, y1, x2, y2)
     love.graphics.line(x1, y2, x2, y1)
     love.graphics.setLineWidth(prev_w)
